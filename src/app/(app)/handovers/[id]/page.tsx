@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PhotoGallery } from "@/components/photo-gallery";
 import { CHECK_ITEM_LABELS, type CheckItemKey } from "@/lib/check-items";
 import { EmailModal } from "@/components/email-modal";
+import { DeleteHandoverButton } from "@/components/delete-handover-button";
 import {
   Download,
   Pencil,
@@ -68,6 +69,7 @@ export default async function HandoverReviewPage({
             </Button>
           </Link>
         )}
+        <DeleteHandoverButton handoverId={id} />
       </div>
 
       <Card>
