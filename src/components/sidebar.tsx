@@ -1,0 +1,79 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
+import {
+  LayoutDashboard,
+  ClipboardPlus,
+  Search,
+  Settings,
+  LogOut,
+  Car,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ThemeToggle } from "./theme-toggle";
+
+const navItems = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/handovers/new", label: "New Handover", icon: ClipboardPlus },
+  { href: "/search", label: "Search", icon: Search },
+  { href: "/settings", label: "Settings", icon: Settings, adminOnly: true },
+];
+
+export function Sidebar() {
+  const pathname = usePathname();
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "admin";
+
+  return (
+    <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:border-r border-border bg-card h-screen sticky top-0">
+      <div className="flex items-center gap-2 p-6 border-b border-border">
+        <Car className="h-6 w-6 text-primary" />
+        <span className="text-lg font-bold">Vehicle Handover</span>
+      </div>
+
+      <nav className="flex-1 p-4 space-y-1">
+        {navItems
+          .filter((item) => !item.adminOnly || isAdmin)
+          .map((item) => {
+            const active = pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  active
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                )}
+              >
+                <item.icon className="h-5 w-5" />
+                {item.label}
+              </Link>
+            );
+          })}
+      </nav>
+
+      <div className="p-4 border-t border-border space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-sm">
+            <p className="font-medium truncate">{session?.user?.name}</p>
+            <p className="text-muted-foreground text-xs truncate">
+              {session?.user?.email}
+            </p>
+          </div>
+          <ThemeToggle />
+        </div>
+        <button
+          onClick={() => signOut({ callbackUrl: "/login" })}
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+        >
+          <LogOut className="h-4 w-4" />
+          Sign Out
+        </button>
+      </div>
+    </aside>
+  );
+}
