@@ -417,11 +417,13 @@ export async function generateHandoverPdf(
   }
 
   // ── FOOTER ON EVERY PAGE ────────────────────────────────
-  const pageCount = doc.bufferedPageRange();
-  for (let i = 0; i < pageCount.count; i++) {
+  const totalPages = doc.bufferedPageRange().count;
+  const genDate = new Date().toLocaleDateString("en-GB");
+  const vehicleLabel = `${vehicle.make} ${vehicle.model} - ${vehicle.registration}`;
+
+  for (let i = 0; i < totalPages; i++) {
     doc.switchToPage(i);
 
-    // Thin line above footer
     doc
       .moveTo(LEFT, FOOTER_Y - 6)
       .lineTo(RIGHT, FOOTER_Y - 6)
@@ -429,28 +431,24 @@ export async function generateHandoverPdf(
       .lineWidth(0.5)
       .stroke();
 
-    doc
-      .fontSize(7)
-      .font("Helvetica")
-      .fillColor("#9ca3af")
-      .text(
-        `Page ${i + 1} of ${pageCount.count}`,
-        LEFT,
-        FOOTER_Y,
-        { width: WIDTH / 3 }
-      )
-      .text(
-        `${vehicle.make} ${vehicle.model} - ${vehicle.registration}`,
-        LEFT + WIDTH / 3,
-        FOOTER_Y,
-        { width: WIDTH / 3, align: "center" }
-      )
-      .text(
-        `Generated ${new Date().toLocaleDateString("en-GB")}`,
-        LEFT + (WIDTH / 3) * 2,
-        FOOTER_Y,
-        { width: WIDTH / 3, align: "right" }
-      );
+    doc.fontSize(7).font("Helvetica").fillColor("#9ca3af");
+
+    doc.text(`Page ${i + 1} of ${totalPages}`, LEFT, FOOTER_Y, {
+      width: WIDTH / 3,
+      lineBreak: false,
+    });
+
+    doc.text(vehicleLabel, LEFT + WIDTH / 3, FOOTER_Y, {
+      width: WIDTH / 3,
+      align: "center",
+      lineBreak: false,
+    });
+
+    doc.text(`Generated ${genDate}`, LEFT + (WIDTH / 3) * 2, FOOTER_Y, {
+      width: WIDTH / 3,
+      align: "right",
+      lineBreak: false,
+    });
   }
 
   doc.end();
