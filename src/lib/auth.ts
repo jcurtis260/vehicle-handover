@@ -14,25 +14,36 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        try {
+          if (!credentials?.email || !credentials?.password) return null;
 
-        const [user] = await db
-          .select()
-          .from(users)
-          .where(eq(users.email, credentials.email.toLowerCase()))
-          .limit(1);
+          const [user] = await db
+            .select()
+            .from(users)
+            .where(eq(users.email, credentials.email.toLowerCase()))
+            .limit(1);
 
-        if (!user) return null;
+          if (!user) {
+            console.log("[Auth] No user found for:", credentials.email);
+            return null;
+          }
 
-        const valid = await compare(credentials.password, user.passwordHash);
-        if (!valid) return null;
+          const valid = await compare(credentials.password, user.passwordHash);
+          if (!valid) {
+            console.log("[Auth] Invalid password for:", credentials.email);
+            return null;
+          }
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-        };
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+          };
+        } catch (error) {
+          console.error("[Auth] Error during authorization:", error);
+          return null;
+        }
       },
     }),
   ],
