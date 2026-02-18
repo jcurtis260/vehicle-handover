@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Mail, X, Loader2 } from "lucide-react";
 
 export function EmailModal({ handoverId }: { handoverId: string }) {
+  const { data: session } = useSession();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
@@ -52,7 +54,10 @@ export function EmailModal({ handoverId }: { handoverId: string }) {
     <>
       <Button
         variant="outline"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          if (!email && session?.user?.email) setEmail(session.user.email);
+          setOpen(true);
+        }}
         className="min-h-[44px]"
       >
         <Mail className="h-4 w-4 mr-2" />
