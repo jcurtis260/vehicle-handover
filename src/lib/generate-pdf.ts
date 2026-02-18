@@ -10,10 +10,19 @@ import { eq } from "drizzle-orm";
 import { CHECK_ITEM_LABELS, type CheckItemKey } from "@/lib/check-items";
 import PDFDocument from "pdfkit";
 
-const BLUE = "#1d4ed8";
-const GRAY = "#666666";
-const LIGHT_GRAY = "#eeeeee";
-const PAGE_MARGIN = 40;
+const BLUE = "#1a56db";
+const DARK = "#1f2937";
+const GRAY = "#6b7280";
+const LIGHT_BG = "#f3f4f6";
+const WHITE = "#ffffff";
+const GREEN = "#16a34a";
+const RED = "#dc2626";
+const LEFT = 40;
+const RIGHT = 555;
+const WIDTH = RIGHT - LEFT;
+const FOOTER_Y = 800;
+
+type Doc = InstanceType<typeof PDFDocument>;
 
 async function fetchImageBuffer(url: string): Promise<Buffer | null> {
   try {
@@ -25,37 +34,57 @@ async function fetchImageBuffer(url: string): Promise<Buffer | null> {
   }
 }
 
-function addHeader(doc: InstanceType<typeof PDFDocument>) {
-  doc
-    .fontSize(20)
-    .fillColor(BLUE)
-    .text("12LR Check Sheet", PAGE_MARGIN, PAGE_MARGIN);
-  doc.fontSize(10).fillColor(GRAY).text("Vehicle Handover Report");
-  doc
-    .moveTo(PAGE_MARGIN, doc.y + 6)
-    .lineTo(555, doc.y + 6)
-    .strokeColor(BLUE)
-    .lineWidth(2)
-    .stroke();
-  doc.y += 15;
+function ensureSpace(doc: Doc, needed: number) {
+  if (doc.y + needed > FOOTER_Y - 20) {
+    doc.addPage();
+    doc.y = LEFT;
+  }
 }
 
-function addDetailRow(
-  doc: InstanceType<typeof PDFDocument>,
-  items: [string, string][],
-  y: number
-) {
-  const colWidth = 170;
-  items.forEach(([label, value], i) => {
-    const x = PAGE_MARGIN + i * colWidth;
-    doc.fontSize(7).fillColor(GRAY).text(label.toUpperCase(), x, y);
+function drawSectionTitle(doc: Doc, title: string) {
+  ensureSpace(doc, 30);
+  doc.y += 14;
+  doc
+    .fontSize(11)
+    .font("Helvetica-Bold")
+    .fillColor(BLUE)
+    .text(title, LEFT, doc.y);
+  const lineY = doc.y + 3;
+  doc
+    .moveTo(LEFT, lineY)
+    .lineTo(RIGHT, lineY)
+    .strokeColor(BLUE)
+    .lineWidth(1)
+    .stroke();
+  doc.y = lineY + 8;
+}
+
+function drawCheckbox(doc: Doc, x: number, y: number, checked: boolean) {
+  const s = 8;
+  if (checked) {
+    doc.rect(x, y, s, s).fillAndStroke(GREEN, GREEN);
     doc
-      .fontSize(10)
-      .fillColor("#000000")
-      .font("Helvetica-Bold")
-      .text(value || "N/A", x, y + 10);
-    doc.font("Helvetica");
-  });
+      .save()
+      .strokeColor(WHITE)
+      .lineWidth(1.4)
+      .moveTo(x + 1.8, y + s * 0.5)
+      .lineTo(x + s * 0.38, y + s - 2)
+      .lineTo(x + s - 1.8, y + 1.8)
+      .stroke()
+      .restore();
+  } else {
+    doc.rect(x, y, s, s).fillAndStroke("#fef2f2", RED);
+    doc
+      .save()
+      .strokeColor(RED)
+      .lineWidth(1)
+      .moveTo(x + 2, y + 2)
+      .lineTo(x + s - 2, y + s - 2)
+      .moveTo(x + s - 2, y + 2)
+      .lineTo(x + 2, y + s - 2)
+      .stroke()
+      .restore();
+  }
 }
 
 export async function generateHandoverPdf(
@@ -91,243 +120,219 @@ export async function generateHandoverPdf(
 
   const doc = new PDFDocument({
     size: "A4",
-    margin: PAGE_MARGIN,
+    margin: LEFT,
     bufferPages: true,
   });
   const chunks: Buffer[] = [];
-
   doc.on("data", (chunk: Buffer) => chunks.push(chunk));
-
   const pdfReady = new Promise<Buffer>((resolve) => {
     doc.on("end", () => resolve(Buffer.concat(chunks)));
   });
 
-  addHeader(doc);
-
-  const detailsY = doc.y;
-  addDetailRow(
-    doc,
-    [
-      ["Date", new Date(handover.date).toLocaleDateString("en-GB")],
-      ["Inspector", handover.name],
-      ["Mileage", handover.mileage?.toLocaleString() || "N/A"],
-    ],
-    detailsY
-  );
-  addDetailRow(
-    doc,
-    [
-      ["Vehicle", `${vehicle.make} ${vehicle.model}`],
-      ["Registration", vehicle.registration],
-      ["Status", handover.status.toUpperCase()],
-    ],
-    detailsY + 30
-  );
-
-  doc.y = detailsY + 70;
-
-  // Vehicle Checks
+  // ── HEADER ──────────────────────────────────────────────
   doc
-    .fontSize(12)
-    .fillColor(BLUE)
+    .rect(0, 0, 595.28, 80)
+    .fill(BLUE);
+
+  doc
+    .fontSize(22)
     .font("Helvetica-Bold")
-    .text("Vehicle Checks", PAGE_MARGIN);
+    .fillColor(WHITE)
+    .text("12LR Check Sheet", LEFT, 22);
   doc
-    .moveTo(PAGE_MARGIN, doc.y + 2)
-    .lineTo(555, doc.y + 2)
-    .strokeColor(LIGHT_GRAY)
-    .lineWidth(0.5)
-    .stroke();
-  doc.y += 8;
-  doc.font("Helvetica");
+    .fontSize(9)
+    .font("Helvetica")
+    .fillColor("#bfdbfe")
+    .text("Vehicle Handover Report", LEFT, 48);
 
-  const checkTableY = doc.y;
+  const statusText = handover.status.toUpperCase();
+  const statusColor = handover.status === "completed" ? "#bbf7d0" : "#fde68a";
+  const statusWidth = doc.widthOfString(statusText) + 16;
   doc
-    .fontSize(7)
-    .fillColor(GRAY)
+    .roundedRect(RIGHT - statusWidth, 26, statusWidth, 22, 4)
+    .fill(statusColor);
+  doc
+    .fontSize(9)
     .font("Helvetica-Bold")
-    .text("", PAGE_MARGIN, checkTableY, { width: 18 })
-    .text("Check Item", PAGE_MARGIN + 22, checkTableY, { width: 300 })
-    .text("Comments", 400, checkTableY, { width: 155, align: "right" });
-  doc.font("Helvetica");
-  doc.y = checkTableY + 14;
+    .fillColor(DARK)
+    .text(statusText, RIGHT - statusWidth + 8, 32);
 
-  for (const check of checks) {
-    if (doc.y > 750) {
-      doc.addPage();
-      doc.y = PAGE_MARGIN;
-    }
+  doc.y = 95;
 
-    const rowY = doc.y;
+  // ── VEHICLE DETAILS ─────────────────────────────────────
+  const detailBoxH = 58;
+  doc
+    .roundedRect(LEFT, doc.y, WIDTH, detailBoxH, 4)
+    .fillAndStroke(LIGHT_BG, "#d1d5db");
+
+  const fields: [string, string][] = [
+    ["Date", new Date(handover.date).toLocaleDateString("en-GB")],
+    ["Inspector", handover.name],
+    ["Mileage", handover.mileage?.toLocaleString() || "N/A"],
+    ["Vehicle", `${vehicle.make} ${vehicle.model}`],
+    ["Registration", vehicle.registration],
+  ];
+
+  const colW = WIDTH / 3;
+  const row1Y = doc.y + 8;
+  const row2Y = row1Y + 26;
+
+  fields.forEach(([label, value], i) => {
+    const row = i < 3 ? row1Y : row2Y;
+    const col = i < 3 ? i : i - 3;
+    const x = LEFT + 10 + col * colW;
+    doc.fontSize(6.5).font("Helvetica").fillColor(GRAY).text(label.toUpperCase(), x, row);
+    doc.fontSize(9.5).font("Helvetica-Bold").fillColor(DARK).text(value || "N/A", x, row + 9);
+  });
+
+  doc.y += detailBoxH + 6;
+
+  // ── VEHICLE CHECKS ──────────────────────────────────────
+  drawSectionTitle(doc, "Vehicle Checks");
+
+  // Table header
+  const thY = doc.y;
+  doc.rect(LEFT, thY - 2, WIDTH, 14).fill(DARK);
+  doc
+    .fontSize(6.5)
+    .font("Helvetica-Bold")
+    .fillColor(WHITE)
+    .text("", LEFT + 6, thY + 1, { width: 14 })
+    .text("CHECK ITEM", LEFT + 22, thY + 1, { width: 280 })
+    .text("COMMENTS", LEFT + 310, thY + 1, { width: WIDTH - 316, align: "right" });
+  doc.y = thY + 16;
+
+  checks.forEach((check, i) => {
     const label =
       CHECK_ITEM_LABELS[check.checkItem as CheckItemKey] || check.checkItem;
 
-    // Draw a checkbox with tick or cross
-    const boxX = PAGE_MARGIN;
-    const boxY = rowY + 1;
-    const boxSize = 9;
+    doc.fontSize(8);
+    const labelH = doc.heightOfString(label, { width: 275 });
+    doc.fontSize(7);
+    const commentH = check.comments
+      ? doc.heightOfString(check.comments, { width: WIDTH - 320 })
+      : 0;
+    const rowH = Math.max(labelH, commentH, 12) + 6;
 
-    if (check.checked) {
-      doc
-        .rect(boxX, boxY, boxSize, boxSize)
-        .fillAndStroke("#16a34a", "#16a34a");
-      // Draw white tick inside the box
-      doc
-        .save()
-        .strokeColor("#ffffff")
-        .lineWidth(1.5)
-        .moveTo(boxX + 2, boxY + boxSize / 2)
-        .lineTo(boxX + boxSize * 0.38, boxY + boxSize - 2.5)
-        .lineTo(boxX + boxSize - 2, boxY + 2)
-        .stroke()
-        .restore();
-    } else {
-      doc
-        .rect(boxX, boxY, boxSize, boxSize)
-        .fillAndStroke("#fef2f2", "#dc2626");
-      // Draw red X inside the box
-      doc
-        .save()
-        .strokeColor("#dc2626")
-        .lineWidth(1.2)
-        .moveTo(boxX + 2.5, boxY + 2.5)
-        .lineTo(boxX + boxSize - 2.5, boxY + boxSize - 2.5)
-        .moveTo(boxX + boxSize - 2.5, boxY + 2.5)
-        .lineTo(boxX + 2.5, boxY + boxSize - 2.5)
-        .stroke()
-        .restore();
+    ensureSpace(doc, rowH);
+
+    const rowY = doc.y;
+
+    // Alternating row background
+    if (i % 2 === 0) {
+      doc.rect(LEFT, rowY - 1, WIDTH, rowH).fill("#f9fafb");
     }
+
+    drawCheckbox(doc, LEFT + 6, rowY + 1, check.checked);
 
     doc
       .fontSize(8)
-      .fillColor("#000000")
-      .text(label, PAGE_MARGIN + 16, rowY, { width: 346 });
+      .font("Helvetica")
+      .fillColor(DARK)
+      .text(label, LEFT + 22, rowY + 1, { width: 275 });
 
     if (check.comments) {
       doc
         .fontSize(7)
         .fillColor(GRAY)
-        .text(check.comments, 400, rowY, { width: 155, align: "right" });
+        .text(check.comments, LEFT + 310, rowY + 1, {
+          width: WIDTH - 316,
+          align: "right",
+        });
     }
 
-    const textHeight = doc.heightOfString(label, { width: 346 });
-    doc.y = rowY + Math.max(textHeight, 12) + 3;
+    doc.y = rowY + rowH;
 
+    // Row separator
     doc
-      .moveTo(PAGE_MARGIN, doc.y)
-      .lineTo(555, doc.y)
-      .strokeColor(LIGHT_GRAY)
+      .moveTo(LEFT, doc.y)
+      .lineTo(RIGHT, doc.y)
+      .strokeColor("#e5e7eb")
       .lineWidth(0.3)
       .stroke();
-    doc.y += 3;
-  }
+  });
 
-  // Tyre Information
-  if (doc.y > 650) doc.addPage();
+  // ── TYRE INFORMATION ────────────────────────────────────
+  drawSectionTitle(doc, "Tyre Information");
 
-  doc.y += 8;
-  doc
-    .fontSize(12)
-    .fillColor(BLUE)
-    .font("Helvetica-Bold")
-    .text("Tyre Information", PAGE_MARGIN);
-  doc
-    .moveTo(PAGE_MARGIN, doc.y + 2)
-    .lineTo(555, doc.y + 2)
-    .strokeColor(LIGHT_GRAY)
-    .lineWidth(0.5)
-    .stroke();
-  doc.y += 8;
-  doc.font("Helvetica");
+  const tyreCols = [
+    { label: "POSITION", x: LEFT + 6, w: 80 },
+    { label: "SIZE", x: LEFT + 90, w: 150 },
+    { label: "DEPTH", x: LEFT + 250, w: 120 },
+    { label: "BRAND", x: LEFT + 380, w: WIDTH - 386 },
+  ];
 
-  const tyreHeaderY = doc.y;
-  doc
-    .fontSize(8)
-    .fillColor(GRAY)
-    .font("Helvetica-Bold")
-    .text("Position", PAGE_MARGIN, tyreHeaderY, { width: 80 })
-    .text("Size", PAGE_MARGIN + 80, tyreHeaderY, { width: 160 })
-    .text("Depth", PAGE_MARGIN + 240, tyreHeaderY, { width: 120 })
-    .text("Brand", PAGE_MARGIN + 360, tyreHeaderY, { width: 155 });
-  doc.font("Helvetica");
-  doc.y = tyreHeaderY + 14;
+  // Tyre table header
+  const tthY = doc.y;
+  doc.rect(LEFT, tthY - 2, WIDTH, 14).fill(DARK);
+  doc.fontSize(6.5).font("Helvetica-Bold").fillColor(WHITE);
+  tyreCols.forEach((c) => doc.text(c.label, c.x, tthY + 1, { width: c.w }));
+  doc.y = tthY + 16;
 
-  doc
-    .moveTo(PAGE_MARGIN, doc.y)
-    .lineTo(555, doc.y)
-    .strokeColor("#333333")
-    .lineWidth(0.5)
-    .stroke();
-  doc.y += 4;
-
-  for (const tyre of tyres) {
+  tyres.forEach((tyre, i) => {
+    ensureSpace(doc, 18);
     const rowY = doc.y;
-    doc
-      .fontSize(8)
-      .fillColor("#000000")
-      .font("Helvetica-Bold")
-      .text(tyre.position, PAGE_MARGIN, rowY, { width: 80 });
-    doc
-      .font("Helvetica")
-      .text(tyre.size || "-", PAGE_MARGIN + 80, rowY, { width: 160 })
-      .text(tyre.depth || "-", PAGE_MARGIN + 240, rowY, { width: 120 })
-      .text(tyre.brand || "-", PAGE_MARGIN + 360, rowY, { width: 155 });
-    doc.y = rowY + 16;
 
+    if (i % 2 === 0) {
+      doc.rect(LEFT, rowY - 1, WIDTH, 16).fill("#f9fafb");
+    }
+
+    doc.fontSize(8).font("Helvetica-Bold").fillColor(DARK);
+    doc.text(tyre.position, tyreCols[0].x, rowY + 1, { width: tyreCols[0].w });
+    doc.font("Helvetica").fillColor(DARK);
+    doc.text(tyre.size || "-", tyreCols[1].x, rowY + 1, { width: tyreCols[1].w });
+    doc.text(tyre.depth || "-", tyreCols[2].x, rowY + 1, { width: tyreCols[2].w });
+    doc.text(tyre.brand || "-", tyreCols[3].x, rowY + 1, { width: tyreCols[3].w });
+
+    doc.y = rowY + 16;
     doc
-      .moveTo(PAGE_MARGIN, doc.y)
-      .lineTo(555, doc.y)
-      .strokeColor(LIGHT_GRAY)
+      .moveTo(LEFT, doc.y)
+      .lineTo(RIGHT, doc.y)
+      .strokeColor("#e5e7eb")
       .lineWidth(0.3)
       .stroke();
+  });
+
+  // ── OTHER COMMENTS ──────────────────────────────────────
+  if (handover.otherComments) {
+    drawSectionTitle(doc, "Other Comments");
+
+    const boxPad = 10;
+    const textW = WIDTH - boxPad * 2;
+    doc.fontSize(9);
+    const textH = doc.heightOfString(handover.otherComments, {
+      width: textW,
+    });
+    const boxH = textH + boxPad * 2;
+
+    ensureSpace(doc, boxH + 4);
+
+    doc
+      .roundedRect(LEFT, doc.y, WIDTH, boxH, 3)
+      .fillAndStroke(LIGHT_BG, "#d1d5db");
+    doc
+      .fontSize(9)
+      .font("Helvetica")
+      .fillColor(DARK)
+      .text(handover.otherComments, LEFT + boxPad, doc.y - boxH + boxPad, {
+        width: textW,
+        lineGap: 3,
+      });
     doc.y += 4;
   }
 
-  // Other Comments
-  if (handover.otherComments) {
-    if (doc.y > 680) doc.addPage();
-
-    doc.y += 8;
-    doc
-      .fontSize(12)
-      .fillColor(BLUE)
-      .font("Helvetica-Bold")
-      .text("Other Comments", PAGE_MARGIN);
-    doc
-      .moveTo(PAGE_MARGIN, doc.y + 2)
-      .lineTo(555, doc.y + 2)
-      .strokeColor(LIGHT_GRAY)
-      .lineWidth(0.5)
-      .stroke();
-    doc.y += 8;
-    doc.font("Helvetica");
-
-    doc
-      .fontSize(9)
-      .fillColor("#000000")
-      .text(handover.otherComments, PAGE_MARGIN, doc.y, {
-        width: 515,
-        lineGap: 3,
-      });
-  }
-
-  // Photos
+  // ── PHOTOS ──────────────────────────────────────────────
   if (photos.length > 0) {
     doc.addPage();
 
+    // Photo page header bar
+    doc.rect(0, 0, 595.28, 44).fill(BLUE);
     doc
-      .fontSize(12)
-      .fillColor(BLUE)
+      .fontSize(14)
       .font("Helvetica-Bold")
-      .text("Photos", PAGE_MARGIN, PAGE_MARGIN);
-    doc
-      .moveTo(PAGE_MARGIN, doc.y + 2)
-      .lineTo(555, doc.y + 2)
-      .strokeColor(LIGHT_GRAY)
-      .lineWidth(0.5)
-      .stroke();
-    doc.y += 10;
-    doc.font("Helvetica");
+      .fillColor(WHITE)
+      .text("Photos", LEFT, 14);
+    doc.y = 56;
 
     const grouped: Record<string, typeof photos> = {};
     for (const photo of photos) {
@@ -336,85 +341,115 @@ export async function generateHandoverPdf(
       grouped[cat].push(photo);
     }
 
-    for (const [category, catPhotos] of Object.entries(grouped)) {
-      if (doc.y > 650) doc.addPage();
+    const imgW = 248;
+    const imgH = 186;
+    const gap = 18;
 
+    for (const [category, catPhotos] of Object.entries(grouped)) {
+      ensureSpace(doc, 30);
+
+      // Category label
       doc
         .fontSize(10)
-        .fillColor("#000000")
         .font("Helvetica-Bold")
+        .fillColor(DARK)
         .text(
           category.charAt(0).toUpperCase() + category.slice(1),
-          PAGE_MARGIN,
-          doc.y + 4
+          LEFT,
+          doc.y
         );
-      doc.y += 4;
-      doc.font("Helvetica");
+      doc.y += 6;
 
       let col = 0;
-      const imgWidth = 245;
-      const imgHeight = 180;
+      const rowStartY = doc.y;
 
       for (const photo of catPhotos) {
-        if (doc.y + imgHeight + 20 > 780) {
+        if (col === 0 && doc.y + imgH + 24 > FOOTER_Y - 20) {
           doc.addPage();
+          doc.y = LEFT;
           col = 0;
         }
 
-        const x = PAGE_MARGIN + col * (imgWidth + 15);
+        const x = LEFT + col * (imgW + gap);
         const imgBuffer = await fetchImageBuffer(photo.blobUrl);
+
+        // Draw light background placeholder
+        doc
+          .roundedRect(x, doc.y, imgW, imgH, 3)
+          .fillAndStroke(LIGHT_BG, "#d1d5db");
 
         if (imgBuffer) {
           try {
-            doc.image(imgBuffer, x, doc.y, {
-              width: imgWidth,
-              height: imgHeight,
-              fit: [imgWidth, imgHeight],
+            doc.image(imgBuffer, x + 1, doc.y + 1, {
+              fit: [imgW - 2, imgH - 2],
+              align: "center",
+              valign: "center",
             });
           } catch {
             doc
               .fontSize(8)
               .fillColor(GRAY)
-              .text("[Photo could not be loaded]", x, doc.y + 80);
+              .text("[Could not render]", x + 10, doc.y + imgH / 2);
           }
-        } else {
-          doc
-            .fontSize(8)
-            .fillColor(GRAY)
-            .text("[Photo could not be loaded]", x, doc.y + 80);
         }
 
-        const captionText = `${category}${photo.caption ? ` - ${photo.caption}` : ""}`;
-        doc
-          .fontSize(7)
-          .fillColor(GRAY)
-          .text(captionText, x, doc.y + imgHeight + 2, { width: imgWidth });
+        // Caption below image
+        if (photo.caption) {
+          doc
+            .fontSize(7)
+            .font("Helvetica")
+            .fillColor(GRAY)
+            .text(photo.caption, x, doc.y + imgH + 3, { width: imgW });
+        }
 
         col++;
         if (col >= 2) {
           col = 0;
-          doc.y += imgHeight + 20;
+          doc.y += imgH + (photo.caption ? 20 : 14);
         }
       }
 
       if (col !== 0) {
-        doc.y += imgHeight + 20;
+        doc.y = rowStartY + imgH + 20;
       }
+      doc.y += 6;
     }
   }
 
-  // Footer on every page
+  // ── FOOTER ON EVERY PAGE ────────────────────────────────
   const pageCount = doc.bufferedPageRange();
   for (let i = 0; i < pageCount.count; i++) {
     doc.switchToPage(i);
+
+    // Thin line above footer
+    doc
+      .moveTo(LEFT, FOOTER_Y - 6)
+      .lineTo(RIGHT, FOOTER_Y - 6)
+      .strokeColor("#d1d5db")
+      .lineWidth(0.5)
+      .stroke();
+
     doc
       .fontSize(7)
-      .fillColor("#999999")
+      .font("Helvetica")
+      .fillColor("#9ca3af")
       .text(
-        `Page ${i + 1} of ${pageCount.count} | ${vehicle.make} ${vehicle.model} - ${vehicle.registration} | Generated ${new Date().toLocaleDateString("en-GB")}`,
-        PAGE_MARGIN,
-        790,
-        { width: 515, align: "center" }
+        `Page ${i + 1} of ${pageCount.count}`,
+        LEFT,
+        FOOTER_Y,
+        { width: WIDTH / 3 }
+      )
+      .text(
+        `${vehicle.make} ${vehicle.model} - ${vehicle.registration}`,
+        LEFT + WIDTH / 3,
+        FOOTER_Y,
+        { width: WIDTH / 3, align: "center" }
+      )
+      .text(
+        `Generated ${new Date().toLocaleDateString("en-GB")}`,
+        LEFT + (WIDTH / 3) * 2,
+        FOOTER_Y,
+        { width: WIDTH / 3, align: "right" }
       );
   }
 
