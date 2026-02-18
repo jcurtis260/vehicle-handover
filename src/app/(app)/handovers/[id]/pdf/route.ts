@@ -111,7 +111,7 @@ export async function GET(
       .where(eq(handoverPhotos.handoverId, id));
 
     // Build PDF
-    const doc = new PDFDocument({ size: "A4", margin: PAGE_MARGIN });
+    const doc = new PDFDocument({ size: "A4", margin: PAGE_MARGIN, bufferPages: true });
     const chunks: Buffer[] = [];
 
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));
