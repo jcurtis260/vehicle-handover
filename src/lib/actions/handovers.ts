@@ -26,6 +26,12 @@ interface TyreInput {
   brand: string;
 }
 
+interface PhotoInput {
+  url: string;
+  category: string;
+  caption: string;
+}
+
 interface HandoverInput {
   make: string;
   model: string;
@@ -37,6 +43,7 @@ interface HandoverInput {
   status: "draft" | "completed";
   checks: CheckInput[];
   tyres: TyreInput[];
+  photos?: PhotoInput[];
 }
 
 export async function createHandover(input: HandoverInput) {
@@ -85,6 +92,22 @@ export async function createHandover(input: HandoverInput) {
         size: t.size || null,
         depth: t.depth || null,
         brand: t.brand || null,
+      }))
+    );
+  }
+
+  if (input.photos && input.photos.length > 0) {
+    await db.insert(handoverPhotos).values(
+      input.photos.map((p) => ({
+        handoverId: handover.id,
+        blobUrl: p.url,
+        caption: p.caption || null,
+        category: (p.category || "other") as
+          | "exterior"
+          | "interior"
+          | "damage"
+          | "tyres"
+          | "other",
       }))
     );
   }
@@ -158,6 +181,27 @@ export async function updateHandover(
         size: t.size || null,
         depth: t.depth || null,
         brand: t.brand || null,
+      }))
+    );
+  }
+
+  // Replace photos: delete existing and re-insert from form state
+  await db
+    .delete(handoverPhotos)
+    .where(eq(handoverPhotos.handoverId, handoverId));
+
+  if (input.photos && input.photos.length > 0) {
+    await db.insert(handoverPhotos).values(
+      input.photos.map((p) => ({
+        handoverId,
+        blobUrl: p.url,
+        caption: p.caption || null,
+        category: (p.category || "other") as
+          | "exterior"
+          | "interior"
+          | "damage"
+          | "tyres"
+          | "other",
       }))
     );
   }

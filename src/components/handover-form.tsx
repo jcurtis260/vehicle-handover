@@ -9,7 +9,6 @@ import { CHECK_ITEMS, CHECK_ITEM_LABELS } from "@/lib/check-items";
 import {
   createHandover,
   updateHandover,
-  linkPhotosToHandover,
 } from "@/lib/actions/handovers";
 import {
   ChevronDown,
@@ -167,6 +166,11 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
           depth: tyres[pos]?.depth || "",
           brand: tyres[pos]?.brand || "",
         })),
+        photos: photos.map((p) => ({
+          url: p.url,
+          category: p.category,
+          caption: p.caption,
+        })),
       };
 
       let result;
@@ -174,13 +178,6 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
         result = await updateHandover(handoverId, payload);
       } else {
         result = await createHandover(payload);
-      }
-
-      if (photos.length > 0) {
-        await linkPhotosToHandover(
-          result.id,
-          photos.map((p) => p.id)
-        );
       }
 
       router.push(`/handovers/${result.id}`);
