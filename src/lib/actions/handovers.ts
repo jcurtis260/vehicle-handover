@@ -334,6 +334,22 @@ export async function deleteHandover(handoverId: string) {
     throw new Error("Forbidden");
   }
 
+  // Delete photos from Vercel Blob before removing DB records
+  const photos = await db
+    .select({ blobUrl: handoverPhotos.blobUrl })
+    .from(handoverPhotos)
+    .where(eq(handoverPhotos.handoverId, handoverId));
+
+  if (photos.length > 0) {
+    const { del } = await import("@vercel/blob");
+    const urls = photos.map((p) => p.blobUrl);
+    try {
+      await del(urls);
+    } catch (err) {
+      console.error("[Delete] Failed to delete blob files:", err);
+    }
+  }
+
   await db.delete(handovers).where(eq(handovers.id, handoverId));
 
   revalidatePath("/dashboard");

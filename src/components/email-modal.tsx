@@ -25,8 +25,14 @@ export function EmailModal({ handoverId }: { handoverId: string }) {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to send");
+        let message = "Failed to send";
+        try {
+          const data = await res.json();
+          message = data.error || message;
+        } catch {
+          // Response wasn't JSON
+        }
+        throw new Error(message);
       }
 
       setSent(true);
