@@ -9,11 +9,12 @@ import { createUser, deleteUser, updateUser } from "@/lib/actions/users";
 import {
   UserPlus,
   Trash2,
-  KeyRound,
   Loader2,
   Shield,
   User,
+  Pencil,
   X,
+  Check,
 } from "lucide-react";
 
 interface UserItem {
@@ -21,6 +22,7 @@ interface UserItem {
   email: string;
   name: string;
   role: string;
+  lastLoginAt: Date | null;
   createdAt: Date;
 }
 
@@ -31,8 +33,7 @@ export function SettingsClient({
 }) {
   const [users, setUsers] = useState(initialUsers);
   const [showAdd, setShowAdd] = useState(false);
-  const [resetUserId, setResetUserId] = useState<string | null>(null);
-  const [newPassword, setNewPassword] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   // Add user form state
@@ -41,6 +42,13 @@ export function SettingsClient({
   const [addPassword, setAddPassword] = useState("");
   const [addRole, setAddRole] = useState<"admin" | "user">("user");
   const [addError, setAddError] = useState("");
+
+  // Edit user form state
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editRole, setEditRole] = useState<"admin" | "user">("user");
+  const [editPassword, setEditPassword] = useState("");
+  const [editError, setEditError] = useState("");
 
   function handleAdd() {
     if (!addName || !addEmail || !addPassword) return;
@@ -54,10 +62,7 @@ export function SettingsClient({
           password: addPassword,
           role: addRole,
         });
-        setUsers((prev) => [
-          ...prev,
-          { ...user, createdAt: new Date() },
-        ]);
+        setUsers((prev) => [...prev, { ...user, lastLoginAt: null, createdAt: new Date() }]);
         setShowAdd(false);
         setAddName("");
         setAddEmail("");
@@ -71,8 +76,70 @@ export function SettingsClient({
     });
   }
 
-  function handleDelete(userId: string) {
-    if (!confirm("Are you sure you want to remove this user?")) return;
+  function startEdit(user: UserItem) {
+    setEditingId(user.id);
+    setEditName(user.name);
+    setEditEmail(user.email);
+    setEditRole(user.role as "admin" | "user");
+    setEditPassword("");
+    setEditError("");
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditError("");
+  }
+
+  function handleSaveEdit(userId: string) {
+    setEditError("");
+
+    startTransition(async () => {
+      try {
+        const current = users.find((u) => u.id === userId);
+        const updates: {
+          name?: string;
+          email?: string;
+          role?: "admin" | "user";
+          password?: string;
+        } = {};
+
+        if (editName !== current?.name) updates.name = editName;
+        if (editEmail !== current?.email) updates.email = editEmail;
+        if (editRole !== current?.role) updates.role = editRole;
+        if (editPassword) updates.password = editPassword;
+
+        if (Object.keys(updates).length > 0) {
+          await updateUser(userId, updates);
+          setUsers((prev) =>
+            prev.map((u) =>
+              u.id === userId
+                ? {
+                    ...u,
+                    name: editName || u.name,
+                    email: editEmail || u.email,
+                    role: editRole || u.role,
+                  }
+                : u
+            )
+          );
+        }
+
+        setEditingId(null);
+      } catch (err) {
+        setEditError(
+          err instanceof Error ? err.message : "Failed to update user"
+        );
+      }
+    });
+  }
+
+  function handleDelete(userId: string, userName: string) {
+    if (
+      !confirm(
+        `Are you sure you want to delete "${userName}"? This will also delete all their handovers and photos.`
+      )
+    )
+      return;
 
     startTransition(async () => {
       try {
@@ -84,43 +151,11 @@ export function SettingsClient({
     });
   }
 
-  function handleResetPassword(userId: string) {
-    if (!newPassword) return;
-
-    startTransition(async () => {
-      try {
-        await updateUser(userId, { password: newPassword });
-        setResetUserId(null);
-        setNewPassword("");
-        alert("Password updated successfully");
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "Failed to update password");
-      }
-    });
-  }
-
-  function handleToggleRole(userId: string, currentRole: string) {
-    const newRole = currentRole === "admin" ? "user" : "admin";
-    startTransition(async () => {
-      try {
-        await updateUser(userId, { role: newRole as "admin" | "user" });
-        setUsers((prev) =>
-          prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
-        );
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "Failed to update role");
-      }
-    });
-  }
-
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Settings</h1>
-        <Button
-          onClick={() => setShowAdd(!showAdd)}
-          className="min-h-[44px]"
-        >
+        <Button onClick={() => setShowAdd(!showAdd)} className="min-h-[44px]">
           <UserPlus className="h-4 w-4 mr-2" />
           Add User
         </Button>
@@ -179,10 +214,7 @@ export function SettingsClient({
               </div>
             </div>
             <div className="flex gap-2 justify-end">
-              <Button
-                variant="outline"
-                onClick={() => setShowAdd(false)}
-              >
+              <Button variant="outline" onClick={() => setShowAdd(false)}>
                 Cancel
               </Button>
               <Button onClick={handleAdd} disabled={isPending}>
@@ -198,97 +230,162 @@ export function SettingsClient({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">
-            Users ({users.length})
-          </CardTitle>
+          <CardTitle className="text-lg">Users ({users.length})</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {users.map((user) => (
               <div
                 key={user.id}
-                className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg border border-border"
+                className="rounded-lg border border-border overflow-hidden"
               >
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary shrink-0">
-                    {user.role === "admin" ? (
-                      <Shield className="h-4 w-4" />
-                    ) : (
-                      <User className="h-4 w-4" />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-medium truncate">{user.name}</p>
-                    <p className="text-sm text-muted-foreground truncate">
-                      {user.email}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 ml-12 sm:ml-0">
-                  <button
-                    onClick={() => handleToggleRole(user.id, user.role)}
-                    title="Toggle role"
-                  >
-                    <Badge
-                      variant={user.role === "admin" ? "default" : "secondary"}
-                      className="cursor-pointer"
-                    >
-                      {user.role}
-                    </Badge>
-                  </button>
-
-                  {resetUserId === user.id ? (
-                    <div className="flex items-center gap-1">
-                      <Input
-                        type="password"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        placeholder="New password"
-                        className="h-8 w-32 text-xs"
-                      />
-                      <Button
-                        size="sm"
-                        onClick={() => handleResetPassword(user.id)}
-                        disabled={isPending || !newPassword}
-                        className="h-8"
+                {editingId === user.id ? (
+                  // Edit mode
+                  <div className="p-4 space-y-4 bg-muted/30">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-semibold text-sm">Edit User</h4>
+                      <button
+                        onClick={cancelEdit}
+                        className="text-muted-foreground hover:text-foreground"
                       >
-                        Save
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    {editError && (
+                      <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
+                        {editError}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          Name
+                        </label>
+                        <Input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          Email
+                        </label>
+                        <Input
+                          type="email"
+                          value={editEmail}
+                          onChange={(e) => setEditEmail(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          New Password (leave blank to keep current)
+                        </label>
+                        <Input
+                          type="password"
+                          value={editPassword}
+                          onChange={(e) => setEditPassword(e.target.value)}
+                          placeholder="Leave blank to keep current"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          Role
+                        </label>
+                        <select
+                          value={editRole}
+                          onChange={(e) =>
+                            setEditRole(e.target.value as "admin" | "user")
+                          }
+                          className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground"
+                        >
+                          <option value="user">User</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 justify-end">
+                      <Button variant="outline" size="sm" onClick={cancelEdit}>
+                        Cancel
                       </Button>
                       <Button
                         size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setResetUserId(null);
-                          setNewPassword("");
-                        }}
-                        className="h-8"
+                        onClick={() => handleSaveEdit(user.id)}
+                        disabled={isPending}
                       >
-                        <X className="h-3 w-3" />
+                        {isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <Check className="h-4 w-4 mr-2" />
+                        )}
+                        Save Changes
                       </Button>
                     </div>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setResetUserId(user.id)}
-                      title="Reset password"
-                      className="h-8 w-8"
-                    >
-                      <KeyRound className="h-4 w-4" />
-                    </Button>
-                  )}
+                  </div>
+                ) : (
+                  // View mode
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary shrink-0">
+                        {user.role === "admin" ? (
+                          <Shield className="h-4 w-4" />
+                        ) : (
+                          <User className="h-4 w-4" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium truncate">{user.name}</p>
+                          <Badge
+                            variant={
+                              user.role === "admin" ? "default" : "secondary"
+                            }
+                          >
+                            {user.role}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground truncate">
+                          {user.email}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Last login:{" "}
+                          {user.lastLoginAt
+                            ? new Date(user.lastLoginAt).toLocaleString("en-GB", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "Never"}
+                        </p>
+                      </div>
+                    </div>
 
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDelete(user.id)}
-                    title="Remove user"
-                    className="h-8 w-8 text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+                    <div className="flex items-center gap-2 ml-12 sm:ml-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => startEdit(user)}
+                        className="h-8"
+                      >
+                        <Pencil className="h-3 w-3 mr-1" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDelete(user.id, user.name)}
+                        className="h-8 text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-3 w-3 mr-1" />
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

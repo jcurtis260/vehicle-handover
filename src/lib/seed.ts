@@ -51,6 +51,10 @@ async function seed() {
   `;
 
   await sql`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP
+  `;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS vehicles (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       make VARCHAR(100) NOT NULL,

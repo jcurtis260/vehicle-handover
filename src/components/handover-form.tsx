@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PhotoCapture } from "@/components/photo-capture";
@@ -88,6 +89,7 @@ function Section({
 
 export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProps) {
   const router = useRouter();
+  const { data: session } = useSession();
   const [saving, setSaving] = useState(false);
 
   const [make, setMake] = useState(initialData?.make || "");
@@ -96,7 +98,7 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
   const [date, setDate] = useState(
     initialData?.date || new Date().toISOString().split("T")[0]
   );
-  const [name, setName] = useState(initialData?.name || "");
+  const [name, setName] = useState(initialData?.name || session?.user?.name || "");
   const [mileage, setMileage] = useState(
     initialData?.mileage?.toString() || ""
   );

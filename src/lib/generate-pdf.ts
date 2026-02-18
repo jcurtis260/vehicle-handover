@@ -162,17 +162,46 @@ export async function generateHandoverPdf(
     const label =
       CHECK_ITEM_LABELS[check.checkItem as CheckItemKey] || check.checkItem;
 
-    doc
-      .fontSize(10)
-      .fillColor(check.checked ? "#16a34a" : "#dc2626")
-      .text(check.checked ? "\u2713" : "\u2717", PAGE_MARGIN, rowY, {
-        width: 18,
-      });
+    // Draw a checkbox with tick or cross
+    const boxX = PAGE_MARGIN;
+    const boxY = rowY + 1;
+    const boxSize = 9;
+
+    if (check.checked) {
+      doc
+        .rect(boxX, boxY, boxSize, boxSize)
+        .fillAndStroke("#16a34a", "#16a34a");
+      // Draw white tick inside the box
+      doc
+        .save()
+        .strokeColor("#ffffff")
+        .lineWidth(1.5)
+        .moveTo(boxX + 2, boxY + boxSize / 2)
+        .lineTo(boxX + boxSize * 0.38, boxY + boxSize - 2.5)
+        .lineTo(boxX + boxSize - 2, boxY + 2)
+        .stroke()
+        .restore();
+    } else {
+      doc
+        .rect(boxX, boxY, boxSize, boxSize)
+        .fillAndStroke("#fef2f2", "#dc2626");
+      // Draw red X inside the box
+      doc
+        .save()
+        .strokeColor("#dc2626")
+        .lineWidth(1.2)
+        .moveTo(boxX + 2.5, boxY + 2.5)
+        .lineTo(boxX + boxSize - 2.5, boxY + boxSize - 2.5)
+        .moveTo(boxX + boxSize - 2.5, boxY + 2.5)
+        .lineTo(boxX + 2.5, boxY + boxSize - 2.5)
+        .stroke()
+        .restore();
+    }
 
     doc
       .fontSize(8)
       .fillColor("#000000")
-      .text(label, PAGE_MARGIN + 22, rowY, { width: 340 });
+      .text(label, PAGE_MARGIN + 16, rowY, { width: 346 });
 
     if (check.comments) {
       doc
@@ -181,7 +210,7 @@ export async function generateHandoverPdf(
         .text(check.comments, 400, rowY, { width: 155, align: "right" });
     }
 
-    const textHeight = doc.heightOfString(label, { width: 340 });
+    const textHeight = doc.heightOfString(label, { width: 346 });
     doc.y = rowY + Math.max(textHeight, 12) + 3;
 
     doc

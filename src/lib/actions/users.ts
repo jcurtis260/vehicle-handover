@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { users } from "@/lib/schema";
+import { users, handovers, vehicles, handoverPhotos } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { hash } from "bcryptjs";
 import { getServerSession } from "next-auth";
@@ -20,6 +20,7 @@ export async function listUsers() {
       email: users.email,
       name: users.name,
       role: users.role,
+      lastLoginAt: users.lastLoginAt,
       createdAt: users.createdAt,
     })
     .from(users)
@@ -70,21 +71,38 @@ export async function createUser(input: {
 
 export async function updateUser(
   userId: string,
-  input: { name?: string; role?: "admin" | "user"; password?: string }
+  input: {
+    name?: string;
+    email?: string;
+    role?: "admin" | "user";
+    password?: string;
+  }
 ) {
   const session = await getServerSession(authOptions);
   if (!session?.user || session.user.role !== "admin") {
     throw new Error("Forbidden");
   }
 
-  const updateData: Record<string, unknown> = {};
-  if (input.name) updateData.name = input.name;
-  if (input.role) updateData.role = input.role;
-  if (input.password) updateData.passwordHash = await hash(input.password, 12);
+  if (input.name) {
+    await db.update(users).set({ name: input.name }).where(eq(users.id, userId));
+  }
 
-  if (Object.keys(updateData).length === 0) return;
+  if (input.email) {
+    await db
+      .update(users)
+      .set({ email: input.email.toLowerCase() })
+      .where(eq(users.id, userId));
+  }
 
-  await db.update(users).set(updateData).where(eq(users.id, userId));
+  if (input.role) {
+    await db.update(users).set({ role: input.role }).where(eq(users.id, userId));
+  }
+
+  if (input.password) {
+    const passwordHash = await hash(input.password, 12);
+    await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
+  }
+
   revalidatePath("/settings");
 }
 
@@ -96,6 +114,59 @@ export async function deleteUser(userId: string) {
 
   if (userId === session.user.id) {
     throw new Error("Cannot delete your own account");
+  }
+
+  const userHandovers = await db
+    .select({ id: handovers.id })
+    .from(handovers)
+    .where(eq(handovers.userId, userId));
+
+  if (userHandovers.length > 0) {
+    for (const h of userHandovers) {
+      const photos = await db
+        .select({ blobUrl: handoverPhotos.blobUrl })
+        .from(handoverPhotos)
+        .where(eq(handoverPhotos.handoverId, h.id));
+
+      if (photos.length > 0) {
+        try {
+          const { del } = await import("@vercel/blob");
+          await del(photos.map((p) => p.blobUrl));
+        } catch (err) {
+          console.error("[DeleteUser] Failed to delete blob files:", err);
+        }
+      }
+    }
+
+    // Handovers cascade-delete checks, tyres, and photo DB records
+    for (const h of userHandovers) {
+      await db.delete(handovers).where(eq(handovers.id, h.id));
+    }
+  }
+
+  // Only delete vehicles created by this user that aren't referenced by
+  // other users' handovers (safe approach to avoid FK violations)
+  const userVehicles = await db
+    .select({ id: vehicles.id })
+    .from(vehicles)
+    .where(eq(vehicles.createdBy, userId));
+
+  for (const v of userVehicles) {
+    const refs = await db
+      .select({ id: handovers.id })
+      .from(handovers)
+      .where(eq(handovers.vehicleId, v.id))
+      .limit(1);
+
+    if (refs.length === 0) {
+      await db.delete(vehicles).where(eq(vehicles.id, v.id));
+    } else {
+      // Vehicle still referenced by other handovers -- reassign to the admin
+      await db
+        .update(vehicles)
+        .set({ createdBy: session.user.id })
+        .where(eq(vehicles.id, v.id));
+    }
   }
 
   await db.delete(users).where(eq(users.id, userId));

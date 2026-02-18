@@ -34,6 +34,13 @@ export const authOptions: NextAuthOptions = {
             return null;
           }
 
+          // Record last login time (fire-and-forget)
+          db.update(users)
+            .set({ lastLoginAt: new Date() })
+            .where(eq(users.id, user.id))
+            .then(() => {})
+            .catch((err) => console.error("[Auth] Failed to update lastLoginAt:", err));
+
           return {
             id: user.id,
             email: user.email,
