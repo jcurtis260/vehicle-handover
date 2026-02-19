@@ -1,5 +1,7 @@
 import { requireAuth } from "@/lib/auth-helpers";
 import { getHandover } from "@/lib/actions/handovers";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -23,6 +25,8 @@ export default async function HandoverReviewPage({
   params: Promise<{ id: string }>;
 }) {
   await requireAuth();
+  const session = await getServerSession(authOptions);
+  const isAdmin = session?.user?.role === "admin";
   const { id } = await params;
   const handover = await getHandover(id);
   if (!handover) notFound();
@@ -69,7 +73,7 @@ export default async function HandoverReviewPage({
             </Button>
           </Link>
         )}
-        <DeleteHandoverButton handoverId={id} />
+        {isAdmin && <DeleteHandoverButton handoverId={id} />}
       </div>
 
       <Card>
