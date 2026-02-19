@@ -53,7 +53,7 @@ export async function POST(
     const { buffer, filename } = await generateHandoverPdf(id);
 
     const { error } = await getResend().emails.send({
-      from: "Vehicle Handover <onboarding@resend.dev>",
+      from: "Vehicle Handover <noreply@contact.frozyn.org>",
       to: [to],
       subject: "Vehicle Handover Report",
       html: `
