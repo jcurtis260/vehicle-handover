@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Camera, Upload, X, Loader2 } from "lucide-react";
+import { Camera, Upload, X, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 
@@ -28,39 +28,74 @@ const CATEGORIES = [
 ];
 
 async function compressImage(file: File, maxWidth = 1920): Promise<File> {
-  return new Promise((resolve) => {
-    const img = document.createElement("img");
-    const canvas = document.createElement("canvas");
-    const reader = new FileReader();
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("Image compression timed out")), 30000);
 
-    reader.onload = (e) => {
-      img.onload = () => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = document.createElement("img");
+
+    img.onload = () => {
+      try {
         let { width, height } = img;
         if (width > maxWidth) {
           height = (height * maxWidth) / width;
           width = maxWidth;
         }
+        const canvas = document.createElement("canvas");
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext("2d")!;
         ctx.drawImage(img, 0, 0, width, height);
         canvas.toBlob(
           (blob) => {
+            clearTimeout(timeout);
+            URL.revokeObjectURL(objectUrl);
+            if (!blob) {
+              reject(new Error("Failed to compress image"));
+              return;
+            }
             resolve(
-              new File([blob!], file.name, {
+              new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), {
                 type: "image/jpeg",
                 lastModified: Date.now(),
               })
             );
           },
           "image/jpeg",
-          0.8
+          0.7
         );
-      };
-      img.src = e.target!.result as string;
+      } catch (err) {
+        clearTimeout(timeout);
+        URL.revokeObjectURL(objectUrl);
+        reject(err);
+      }
     };
-    reader.readAsDataURL(file);
+
+    img.onerror = () => {
+      clearTimeout(timeout);
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Failed to load image"));
+    };
+
+    img.src = objectUrl;
   });
+}
+
+async function uploadWithTimeout(
+  formData: FormData,
+  timeoutMs = 60000
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch("/api/upload", {
+      method: "POST",
+      body: formData,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function PhotoCapture({
@@ -70,6 +105,7 @@ export function PhotoCapture({
   fixedCategory,
 }: PhotoCaptureProps) {
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const [selectedCategory, setSelectedCategory] = useState(fixedCategory || "exterior");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -77,28 +113,56 @@ export function PhotoCapture({
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
     setUploading(true);
+    setUploadError("");
 
     const newPhotos: PhotoItem[] = [];
-    for (const file of Array.from(files)) {
-      const compressed = await compressImage(file);
-      const formData = new FormData();
-      formData.append("file", compressed);
-      formData.append("category", selectedCategory);
-      if (handoverId) formData.append("handoverId", handoverId);
+    let failCount = 0;
 
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
-      if (res.ok) {
-        const data = await res.json();
-        newPhotos.push({
-          id: data.photo.id,
-          url: data.url,
-          category: selectedCategory,
-          caption: "",
-        });
+    for (const file of Array.from(files)) {
+      try {
+        const compressed = await compressImage(file);
+        const formData = new FormData();
+        formData.append("file", compressed);
+        formData.append("category", fixedCategory || selectedCategory);
+        if (handoverId) formData.append("handoverId", handoverId);
+
+        const res = await uploadWithTimeout(formData);
+        if (res.ok) {
+          const data = await res.json();
+          newPhotos.push({
+            id: data.photo.id,
+            url: data.url,
+            category: fixedCategory || selectedCategory,
+            caption: "",
+          });
+        } else {
+          failCount++;
+          console.error("[Upload] Server error:", res.status);
+        }
+      } catch (err) {
+        failCount++;
+        if (err instanceof DOMException && err.name === "AbortError") {
+          console.error("[Upload] Request timed out");
+        } else {
+          console.error("[Upload] Failed:", err);
+        }
       }
     }
 
-    onPhotosChange([...photos, ...newPhotos]);
+    if (newPhotos.length > 0) {
+      onPhotosChange([...photos, ...newPhotos]);
+    }
+
+    if (failCount > 0) {
+      setUploadError(
+        `${failCount} photo${failCount > 1 ? "s" : ""} failed to upload. Please try again.`
+      );
+    }
+
+    // Reset file inputs so the same file can be re-selected
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
+
     setUploading(false);
   }
 
@@ -145,8 +209,20 @@ export function PhotoCapture({
           Upload
         </Button>
 
-        {uploading && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
+        {uploading && (
+          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            Uploading...
+          </span>
+        )}
       </div>
+
+      {uploadError && (
+        <div className="flex items-center gap-2 rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {uploadError}
+        </div>
+      )}
 
       <input
         ref={cameraInputRef}
