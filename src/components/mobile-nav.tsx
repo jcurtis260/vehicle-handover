@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import {
   LayoutDashboard,
   ClipboardPlus,
+  ClipboardList,
   Search,
   Settings,
   FileText,
@@ -15,6 +16,7 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/dashboard", label: "Home", icon: LayoutDashboard },
   { href: "/handovers/new", label: "New", icon: ClipboardPlus },
+  { href: "/handovers", label: "All", icon: ClipboardList, exact: true },
   { href: "/search", label: "Search", icon: Search },
   { href: "/changelog", label: "Log", icon: FileText, permission: "changelog" as const },
   { href: "/settings", label: "Settings", icon: Settings, adminOnly: true },
@@ -37,7 +39,9 @@ export function MobileNav() {
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card safe-bottom">
       <div className="flex items-center justify-around py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {items.map((item) => {
-          const active = pathname.startsWith(item.href);
+          const active = "exact" in item && item.exact
+            ? pathname === item.href
+            : pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}

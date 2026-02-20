@@ -7,8 +7,26 @@ import {
   tyreRecords,
   vehicles,
   handoverPhotos,
+  users,
 } from "@/lib/schema";
-import { eq, and, or, ilike, desc, sql, count } from "drizzle-orm";
+import {
+  eq,
+  and,
+  or,
+  ilike,
+  desc,
+  asc,
+  sql,
+  count,
+  gte,
+  lte,
+} from "drizzle-orm";
+import {
+  CHECK_ITEM_LABELS,
+  DELIVERY_CHECK_ITEM_LABELS,
+  type CheckItemKey,
+  type DeliveryCheckItemKey,
+} from "@/lib/check-items";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
@@ -390,4 +408,396 @@ export async function linkPhotosToHandover(
   }
 
   revalidatePath(`/handovers/${handoverId}`);
+}
+
+export async function getDashboardAnalytics() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) throw new Error("Unauthorized");
+
+  const isAdmin = session.user.role === "admin";
+  const userFilter = isAdmin ? sql`1=1` : eq(handovers.userId, session.user.id);
+
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+  const allLabels: Record<string, string> = {
+    ...CHECK_ITEM_LABELS,
+    ...DELIVERY_CHECK_ITEM_LABELS,
+  };
+
+  const [
+    collectionsResult,
+    deliveriesResult,
+    thisMonthResult,
+    lastMonthResult,
+    passRateResult,
+    tyreStatsResult,
+    photoCountResult,
+    damagePhotoResult,
+    topMakesResult,
+    monthlyResult,
+    failedChecksResult,
+    inspectorResult,
+  ] = await Promise.all([
+    // Collections count
+    db
+      .select({ value: count() })
+      .from(handovers)
+      .where(and(userFilter, eq(handovers.type, "collection"))),
+
+    // Deliveries count
+    db
+      .select({ value: count() })
+      .from(handovers)
+      .where(and(userFilter, eq(handovers.type, "delivery"))),
+
+    // This month
+    db
+      .select({ value: count() })
+      .from(handovers)
+      .where(and(userFilter, gte(handovers.date, startOfMonth))),
+
+    // Last month
+    db
+      .select({ value: count() })
+      .from(handovers)
+      .where(
+        and(
+          userFilter,
+          gte(handovers.date, startOfLastMonth),
+          sql`${handovers.date} < ${startOfMonth}`
+        )
+      ),
+
+    // Average pass rate across completed handovers
+    db
+      .select({
+        total: count(),
+        passed: sql<number>`COUNT(*) FILTER (WHERE ${handoverChecks.checked} = true)`,
+      })
+      .from(handoverChecks)
+      .innerJoin(handovers, eq(handoverChecks.handoverId, handovers.id))
+      .where(and(userFilter, eq(handovers.status, "completed"))),
+
+    // Tyre stats: total and run flat count
+    db
+      .select({
+        total: count(),
+        runFlat: sql<number>`COUNT(*) FILTER (WHERE ${tyreRecords.tyreType} = 'run_flat')`,
+      })
+      .from(tyreRecords)
+      .innerJoin(handovers, eq(tyreRecords.handoverId, handovers.id))
+      .where(userFilter),
+
+    // Total photos
+    db
+      .select({ value: count() })
+      .from(handoverPhotos)
+      .innerJoin(handovers, eq(handoverPhotos.handoverId, handovers.id))
+      .where(userFilter),
+
+    // Damage photos
+    db
+      .select({ value: count() })
+      .from(handoverPhotos)
+      .innerJoin(handovers, eq(handoverPhotos.handoverId, handovers.id))
+      .where(and(userFilter, eq(handoverPhotos.category, "damage"))),
+
+    // Top 8 vehicle makes
+    db
+      .select({
+        make: vehicles.make,
+        total: count(),
+      })
+      .from(vehicles)
+      .innerJoin(handovers, eq(handovers.vehicleId, vehicles.id))
+      .where(userFilter)
+      .groupBy(vehicles.make)
+      .orderBy(desc(count()))
+      .limit(8),
+
+    // Monthly handovers (last 6 months)
+    db
+      .select({
+        month: sql<string>`TO_CHAR(${handovers.date}, 'YYYY-MM')`,
+        type: handovers.type,
+        total: count(),
+      })
+      .from(handovers)
+      .where(
+        and(
+          userFilter,
+          gte(
+            handovers.date,
+            new Date(now.getFullYear(), now.getMonth() - 5, 1)
+          )
+        )
+      )
+      .groupBy(sql`TO_CHAR(${handovers.date}, 'YYYY-MM')`, handovers.type)
+      .orderBy(sql`TO_CHAR(${handovers.date}, 'YYYY-MM')`),
+
+    // Most failed checks (top 10, completed handovers only)
+    db
+      .select({
+        checkItem: handoverChecks.checkItem,
+        total: count(),
+        fails: sql<number>`COUNT(*) FILTER (WHERE ${handoverChecks.checked} = false)`,
+      })
+      .from(handoverChecks)
+      .innerJoin(handovers, eq(handoverChecks.handoverId, handovers.id))
+      .where(and(userFilter, eq(handovers.status, "completed")))
+      .groupBy(handoverChecks.checkItem)
+      .orderBy(desc(sql`COUNT(*) FILTER (WHERE ${handoverChecks.checked} = false)`))
+      .limit(10),
+
+    // Handovers per inspector (admin only, top 5)
+    isAdmin
+      ? db
+          .select({
+            name: users.name,
+            total: count(),
+          })
+          .from(handovers)
+          .innerJoin(users, eq(handovers.userId, users.id))
+          .groupBy(users.name)
+          .orderBy(desc(count()))
+          .limit(5)
+      : Promise.resolve([]),
+  ]);
+
+  const passRate = passRateResult[0];
+  const passPercentage =
+    passRate.total > 0
+      ? Math.round((passRate.passed / passRate.total) * 100)
+      : 0;
+
+  const tyreStat = tyreStatsResult[0];
+  const runFlatPercentage =
+    tyreStat.total > 0
+      ? Math.round((tyreStat.runFlat / tyreStat.total) * 100)
+      : 0;
+
+  const thisMonth = thisMonthResult[0].value;
+  const lastMonth = lastMonthResult[0].value;
+  const monthTrend =
+    lastMonth > 0
+      ? Math.round(((thisMonth - lastMonth) / lastMonth) * 100)
+      : thisMonth > 0
+        ? 100
+        : 0;
+
+  // Pivot monthly data into { month, collections, deliveries }
+  const monthlyMap = new Map<
+    string,
+    { month: string; collections: number; deliveries: number }
+  >();
+  for (const row of monthlyResult) {
+    if (!monthlyMap.has(row.month)) {
+      monthlyMap.set(row.month, {
+        month: row.month,
+        collections: 0,
+        deliveries: 0,
+      });
+    }
+    const entry = monthlyMap.get(row.month)!;
+    if (row.type === "delivery") {
+      entry.deliveries = row.total;
+    } else {
+      entry.collections = row.total;
+    }
+  }
+
+  return {
+    collections: collectionsResult[0].value,
+    deliveries: deliveriesResult[0].value,
+    thisMonth,
+    monthTrend,
+    passPercentage,
+    runFlatPercentage,
+    totalTyres: tyreStat.total,
+    totalPhotos: photoCountResult[0].value,
+    damagePhotos: damagePhotoResult[0].value,
+    topMakes: topMakesResult.map((r) => ({
+      make: r.make,
+      count: r.total,
+    })),
+    monthly: Array.from(monthlyMap.values()),
+    failedChecks: failedChecksResult.map((r) => ({
+      item:
+        allLabels[r.checkItem as CheckItemKey | DeliveryCheckItemKey] ||
+        r.checkItem,
+      fails: r.fails,
+      total: r.total,
+      percentage: r.total > 0 ? Math.round((r.fails / r.total) * 100) : 0,
+    })),
+    inspectors: inspectorResult.map((r) => ({
+      name: r.name,
+      count: r.total,
+    })),
+    isAdmin,
+  };
+}
+
+export async function getHandoverFilterOptions() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) throw new Error("Unauthorized");
+
+  const isAdmin = session.user.role === "admin";
+  const userFilter = isAdmin ? sql`1=1` : eq(handovers.userId, session.user.id);
+
+  const [makesResult, modelsResult, inspectorsResult] = await Promise.all([
+    db
+      .selectDistinct({ make: vehicles.make })
+      .from(vehicles)
+      .innerJoin(handovers, eq(handovers.vehicleId, vehicles.id))
+      .where(userFilter)
+      .orderBy(asc(vehicles.make)),
+
+    db
+      .selectDistinct({ model: vehicles.model })
+      .from(vehicles)
+      .innerJoin(handovers, eq(handovers.vehicleId, vehicles.id))
+      .where(userFilter)
+      .orderBy(asc(vehicles.model)),
+
+    isAdmin
+      ? db
+          .selectDistinct({ id: users.id, name: users.name })
+          .from(users)
+          .innerJoin(handovers, eq(handovers.userId, users.id))
+          .orderBy(asc(users.name))
+      : Promise.resolve([]),
+  ]);
+
+  return {
+    makes: makesResult.map((r) => r.make),
+    models: modelsResult.map((r) => r.model),
+    inspectors: inspectorsResult.map((r) => ({ id: r.id, name: r.name })),
+    isAdmin,
+  };
+}
+
+export interface HandoverFilters {
+  search?: string;
+  make?: string;
+  model?: string;
+  status?: "draft" | "completed";
+  type?: "collection" | "delivery";
+  inspectorId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: "date" | "make" | "registration" | "status" | "type";
+  sortDir?: "asc" | "desc";
+}
+
+export async function listFilteredHandovers(
+  filters: HandoverFilters = {},
+  page = 1,
+  pageSize = 20
+) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) throw new Error("Unauthorized");
+
+  const isAdmin = session.user.role === "admin";
+  const conditions: ReturnType<typeof eq>[] = [];
+
+  if (!isAdmin) {
+    conditions.push(eq(handovers.userId, session.user.id));
+  }
+
+  if (filters.search) {
+    const pattern = `%${filters.search}%`;
+    conditions.push(
+      or(
+        ilike(vehicles.make, pattern),
+        ilike(vehicles.model, pattern),
+        ilike(vehicles.registration, pattern)
+      )!
+    );
+  }
+
+  if (filters.make) {
+    conditions.push(eq(vehicles.make, filters.make));
+  }
+
+  if (filters.model) {
+    conditions.push(eq(vehicles.model, filters.model));
+  }
+
+  if (filters.status) {
+    conditions.push(eq(handovers.status, filters.status));
+  }
+
+  if (filters.type) {
+    conditions.push(eq(handovers.type, filters.type));
+  }
+
+  if (filters.inspectorId && isAdmin) {
+    conditions.push(eq(handovers.userId, filters.inspectorId));
+  }
+
+  if (filters.dateFrom) {
+    conditions.push(gte(handovers.date, new Date(filters.dateFrom)));
+  }
+
+  if (filters.dateTo) {
+    const to = new Date(filters.dateTo);
+    to.setHours(23, 59, 59, 999);
+    conditions.push(lte(handovers.date, to));
+  }
+
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const sortColumn = (() => {
+    switch (filters.sortBy) {
+      case "make":
+        return vehicles.make;
+      case "registration":
+        return vehicles.registration;
+      case "status":
+        return handovers.status;
+      case "type":
+        return handovers.type;
+      default:
+        return handovers.date;
+    }
+  })();
+
+  const orderFn = filters.sortDir === "asc" ? asc : desc;
+
+  const [totalResult, data] = await Promise.all([
+    db
+      .select({ value: count() })
+      .from(handovers)
+      .innerJoin(vehicles, eq(handovers.vehicleId, vehicles.id))
+      .where(whereClause),
+
+    db
+      .select({
+        id: handovers.id,
+        date: handovers.date,
+        name: handovers.name,
+        status: handovers.status,
+        type: handovers.type,
+        mileage: handovers.mileage,
+        vehicleMake: vehicles.make,
+        vehicleModel: vehicles.model,
+        vehicleRegistration: vehicles.registration,
+      })
+      .from(handovers)
+      .innerJoin(vehicles, eq(handovers.vehicleId, vehicles.id))
+      .where(whereClause)
+      .orderBy(orderFn(sortColumn))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
+  ]);
+
+  return {
+    data,
+    total: totalResult[0].value,
+    page,
+    pageSize,
+    totalPages: Math.ceil(totalResult[0].value / pageSize),
+  };
 }
