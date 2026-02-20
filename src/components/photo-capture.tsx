@@ -16,6 +16,7 @@ interface PhotoCaptureProps {
   handoverId?: string;
   photos: PhotoItem[];
   onPhotosChange: (photos: PhotoItem[]) => void;
+  fixedCategory?: string;
 }
 
 const CATEGORIES = [
@@ -66,9 +67,10 @@ export function PhotoCapture({
   handoverId,
   photos,
   onPhotosChange,
+  fixedCategory,
 }: PhotoCaptureProps) {
   const [uploading, setUploading] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState("exterior");
+  const [selectedCategory, setSelectedCategory] = useState(fixedCategory || "exterior");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -107,17 +109,19 @@ export function PhotoCapture({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <select
-          value={selectedCategory}
-          onChange={(e) => setSelectedCategory(e.target.value)}
-          className="h-10 rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground"
-        >
-          {CATEGORIES.map((c) => (
-            <option key={c.value} value={c.value}>
-              {c.label}
-            </option>
-          ))}
-        </select>
+        {!fixedCategory && (
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="h-10 rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground"
+          >
+            {CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        )}
 
         <Button
           type="button"
@@ -183,7 +187,7 @@ export function PhotoCapture({
               <button
                 type="button"
                 onClick={() => removePhoto(photo.id)}
-                className="absolute top-1 right-1 h-6 w-6 flex items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute top-1 right-1 h-6 w-6 flex items-center justify-center rounded-full bg-destructive text-destructive-foreground lg:opacity-0 lg:group-hover:opacity-100 transition-opacity"
               >
                 <X className="h-3 w-3" />
               </button>
