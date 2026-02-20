@@ -35,6 +35,8 @@ export const users = pgTable("users", {
   name: varchar("name", { length: 255 }).notNull(),
   passwordHash: text("password_hash").notNull(),
   role: roleEnum("role").notNull().default("user"),
+  canEdit: boolean("can_edit").notNull().default(false),
+  canDelete: boolean("can_delete").notNull().default(false),
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

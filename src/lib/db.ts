@@ -11,6 +11,8 @@ async function runAutoMigrations() {
   _migrated = true;
   try {
     await _sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP`;
+    await _sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_edit BOOLEAN NOT NULL DEFAULT false`;
+    await _sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_delete BOOLEAN NOT NULL DEFAULT false`;
   } catch (err) {
     console.error("[AutoMigrate] Failed:", err);
   }

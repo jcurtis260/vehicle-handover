@@ -34,7 +34,6 @@ export const authOptions: NextAuthOptions = {
             return null;
           }
 
-          // Record last login time (fire-and-forget)
           db.update(users)
             .set({ lastLoginAt: new Date() })
             .where(eq(users.id, user.id))
@@ -46,6 +45,8 @@ export const authOptions: NextAuthOptions = {
             email: user.email,
             name: user.name,
             role: user.role,
+            canEdit: user.canEdit,
+            canDelete: user.canDelete,
           };
         } catch (error) {
           console.error("[Auth] Error during authorization:", error);
@@ -58,7 +59,10 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
-        token.role = (user as unknown as { role: string }).role;
+        const u = user as unknown as { role: string; canEdit: boolean; canDelete: boolean };
+        token.role = u.role;
+        token.canEdit = u.canEdit;
+        token.canDelete = u.canDelete;
       }
       return token;
     },
@@ -66,6 +70,8 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as string;
+        session.user.canEdit = token.canEdit as boolean;
+        session.user.canDelete = token.canDelete as boolean;
       }
       return session;
     },
@@ -75,6 +81,6 @@ export const authOptions: NextAuthOptions = {
   },
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    maxAge: 30 * 24 * 60 * 60,
   },
 };

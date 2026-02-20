@@ -123,6 +123,9 @@ export async function updateHandover(
 ) {
   const session = await getServerSession(authOptions);
   if (!session?.user) throw new Error("Unauthorized");
+  if (session.user.role !== "admin" && !session.user.canEdit) {
+    throw new Error("Forbidden: no edit permission");
+  }
 
   const [existing] = await db
     .select()
@@ -322,7 +325,9 @@ export async function searchHandovers(query: string) {
 export async function deleteHandover(handoverId: string) {
   const session = await getServerSession(authOptions);
   if (!session?.user) throw new Error("Unauthorized");
-  if (session.user.role !== "admin") throw new Error("Forbidden");
+  if (session.user.role !== "admin" && !session.user.canDelete) {
+    throw new Error("Forbidden");
+  }
 
   const [existing] = await db
     .select()

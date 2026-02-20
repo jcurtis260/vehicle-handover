@@ -1,7 +1,9 @@
 import { requireAuth } from "@/lib/auth-helpers";
 import { getHandover } from "@/lib/actions/handovers";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { HandoverForm } from "@/components/handover-form";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { CHECK_ITEMS } from "@/lib/check-items";
 
 export default async function EditHandoverPage({
@@ -10,9 +12,18 @@ export default async function EditHandoverPage({
   params: Promise<{ id: string }>;
 }) {
   await requireAuth();
+  const session = await getServerSession(authOptions);
   const { id } = await params;
   const handover = await getHandover(id);
   if (!handover) notFound();
+
+  const isAdmin = session?.user?.role === "admin";
+  const canEdit = isAdmin || session?.user?.canEdit === true;
+
+  // Only allow editing completed reports if user has edit permission
+  if (handover.status === "completed" && !canEdit) {
+    redirect(`/handovers/${id}`);
+  }
 
   const checksMap: Record<string, { checked: boolean; comments: string }> = {};
   for (const key of CHECK_ITEMS) {

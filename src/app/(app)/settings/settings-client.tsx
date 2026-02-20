@@ -22,6 +22,8 @@ interface UserItem {
   email: string;
   name: string;
   role: string;
+  canEdit: boolean;
+  canDelete: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;
 }
@@ -48,6 +50,8 @@ export function SettingsClient({
   const [editEmail, setEditEmail] = useState("");
   const [editRole, setEditRole] = useState<"admin" | "user">("user");
   const [editPassword, setEditPassword] = useState("");
+  const [editCanEdit, setEditCanEdit] = useState(false);
+  const [editCanDelete, setEditCanDelete] = useState(false);
   const [editError, setEditError] = useState("");
 
   function handleAdd() {
@@ -62,7 +66,7 @@ export function SettingsClient({
           password: addPassword,
           role: addRole,
         });
-        setUsers((prev) => [...prev, { ...user, lastLoginAt: null, createdAt: new Date() }]);
+        setUsers((prev) => [...prev, { ...user, canEdit: false, canDelete: false, lastLoginAt: null, createdAt: new Date() }]);
         setShowAdd(false);
         setAddName("");
         setAddEmail("");
@@ -82,6 +86,8 @@ export function SettingsClient({
     setEditEmail(user.email);
     setEditRole(user.role as "admin" | "user");
     setEditPassword("");
+    setEditCanEdit(user.canEdit);
+    setEditCanDelete(user.canDelete);
     setEditError("");
   }
 
@@ -101,12 +107,16 @@ export function SettingsClient({
           email?: string;
           role?: "admin" | "user";
           password?: string;
+          canEdit?: boolean;
+          canDelete?: boolean;
         } = {};
 
         if (editName !== current?.name) updates.name = editName;
         if (editEmail !== current?.email) updates.email = editEmail;
         if (editRole !== current?.role) updates.role = editRole;
         if (editPassword) updates.password = editPassword;
+        if (editCanEdit !== current?.canEdit) updates.canEdit = editCanEdit;
+        if (editCanDelete !== current?.canDelete) updates.canDelete = editCanDelete;
 
         if (Object.keys(updates).length > 0) {
           await updateUser(userId, updates);
@@ -118,6 +128,8 @@ export function SettingsClient({
                     name: editName || u.name,
                     email: editEmail || u.email,
                     role: editRole || u.role,
+                    canEdit: editCanEdit,
+                    canDelete: editCanDelete,
                   }
                 : u
             )
@@ -306,6 +318,37 @@ export function SettingsClient({
                       </div>
                     </div>
 
+                    {editRole !== "admin" && (
+                      <div className="rounded-lg border border-border p-3 space-y-3">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                          Permissions
+                        </p>
+                        <div className="flex flex-col sm:flex-row gap-4">
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={editCanEdit}
+                              onChange={(e) => setEditCanEdit(e.target.checked)}
+                              className="h-4 w-4 rounded border-border text-primary accent-primary"
+                            />
+                            <span className="text-sm">Can edit reports</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={editCanDelete}
+                              onChange={(e) => setEditCanDelete(e.target.checked)}
+                              className="h-4 w-4 rounded border-border text-primary accent-primary"
+                            />
+                            <span className="text-sm">Can delete reports</span>
+                          </label>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Admins always have full access. These only apply to standard users.
+                        </p>
+                      </div>
+                    )}
+
                     <div className="flex gap-2 justify-end">
                       <Button variant="outline" size="sm" onClick={cancelEdit}>
                         Cancel
@@ -349,6 +392,22 @@ export function SettingsClient({
                         <p className="text-sm text-muted-foreground truncate">
                           {user.email}
                         </p>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          {user.role !== "admin" && (user.canEdit || user.canDelete) && (
+                            <>
+                              {user.canEdit && (
+                                <span className="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400">
+                                  Can Edit
+                                </span>
+                              )}
+                              {user.canDelete && (
+                                <span className="inline-flex items-center rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400">
+                                  Can Delete
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </div>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           Last login:{" "}
                           {user.lastLoginAt

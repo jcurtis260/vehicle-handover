@@ -20,6 +20,8 @@ export async function listUsers() {
       email: users.email,
       name: users.name,
       role: users.role,
+      canEdit: users.canEdit,
+      canDelete: users.canDelete,
       lastLoginAt: users.lastLoginAt,
       createdAt: users.createdAt,
     })
@@ -76,6 +78,8 @@ export async function updateUser(
     email?: string;
     role?: "admin" | "user";
     password?: string;
+    canEdit?: boolean;
+    canDelete?: boolean;
   }
 ) {
   const session = await getServerSession(authOptions);
@@ -101,6 +105,14 @@ export async function updateUser(
   if (input.password) {
     const passwordHash = await hash(input.password, 12);
     await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
+  }
+
+  if (input.canEdit !== undefined) {
+    await db.update(users).set({ canEdit: input.canEdit }).where(eq(users.id, userId));
+  }
+
+  if (input.canDelete !== undefined) {
+    await db.update(users).set({ canDelete: input.canDelete }).where(eq(users.id, userId));
   }
 
   revalidatePath("/settings");

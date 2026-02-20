@@ -7,6 +7,8 @@ declare module "next-auth" {
       email: string;
       name: string;
       role: string;
+      canEdit: boolean;
+      canDelete: boolean;
     };
   }
 }
@@ -15,5 +17,7 @@ declare module "next-auth/jwt" {
   interface JWT {
     id: string;
     role: string;
+    canEdit: boolean;
+    canDelete: boolean;
   }
 }
