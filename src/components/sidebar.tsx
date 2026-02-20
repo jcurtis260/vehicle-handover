@@ -10,6 +10,7 @@ import {
   Settings,
   LogOut,
   Car,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./theme-toggle";
@@ -18,6 +19,7 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/handovers/new", label: "New Handover", icon: ClipboardPlus },
   { href: "/search", label: "Search", icon: Search },
+  { href: "/changelog", label: "Changelog", icon: FileText, permission: "changelog" as const },
   { href: "/settings", label: "Settings", icon: Settings, adminOnly: true },
 ];
 
@@ -35,7 +37,13 @@ export function Sidebar() {
 
       <nav className="flex-1 p-4 space-y-1">
         {navItems
-          .filter((item) => !item.adminOnly || isAdmin)
+          .filter((item) => {
+            if (item.adminOnly && !isAdmin) return false;
+            if ("permission" in item && item.permission === "changelog") {
+              return isAdmin || session?.user?.canViewChangelog;
+            }
+            return true;
+          })
           .map((item) => {
             const active = pathname.startsWith(item.href);
             return (

@@ -22,6 +22,7 @@ export async function listUsers() {
       role: users.role,
       canEdit: users.canEdit,
       canDelete: users.canDelete,
+      canViewChangelog: users.canViewChangelog,
       lastLoginAt: users.lastLoginAt,
       createdAt: users.createdAt,
     })
@@ -80,6 +81,7 @@ export async function updateUser(
     password?: string;
     canEdit?: boolean;
     canDelete?: boolean;
+    canViewChangelog?: boolean;
   }
 ) {
   const session = await getServerSession(authOptions);
@@ -113,6 +115,10 @@ export async function updateUser(
 
   if (input.canDelete !== undefined) {
     await db.update(users).set({ canDelete: input.canDelete }).where(eq(users.id, userId));
+  }
+
+  if (input.canViewChangelog !== undefined) {
+    await db.update(users).set({ canViewChangelog: input.canViewChangelog }).where(eq(users.id, userId));
   }
 
   revalidatePath("/settings");

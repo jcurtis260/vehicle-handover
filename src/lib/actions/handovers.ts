@@ -24,6 +24,7 @@ interface TyreInput {
   size: string;
   depth: string;
   brand: string;
+  tyreType?: string;
 }
 
 interface PhotoInput {
@@ -92,6 +93,7 @@ export async function createHandover(input: HandoverInput) {
         size: t.size || null,
         depth: t.depth || null,
         brand: t.brand || null,
+        tyreType: t.tyreType || "normal",
       }))
     );
   }
@@ -184,6 +186,7 @@ export async function updateHandover(
         size: t.size || null,
         depth: t.depth || null,
         brand: t.brand || null,
+        tyreType: t.tyreType || "normal",
       }))
     );
   }

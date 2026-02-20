@@ -48,6 +48,7 @@ export const CHECK_ITEMS = [
   "toolkit",
   "water_ingress",
   "discs_pads_condition",
+  "diagnostic_checks",
 ] as const;
 
 export type CheckItemKey = (typeof CHECK_ITEMS)[number];
@@ -102,4 +103,5 @@ export const CHECK_ITEM_LABELS: Record<CheckItemKey, string> = {
   toolkit: "Toolkit",
   water_ingress: "Check for Water Ingress",
   discs_pads_condition: "Discs & Pads Condition",
+  diagnostic_checks: "Diagnostic Checks Completed",
 };

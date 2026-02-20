@@ -24,6 +24,7 @@ interface UserItem {
   role: string;
   canEdit: boolean;
   canDelete: boolean;
+  canViewChangelog: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;
 }
@@ -52,6 +53,7 @@ export function SettingsClient({
   const [editPassword, setEditPassword] = useState("");
   const [editCanEdit, setEditCanEdit] = useState(false);
   const [editCanDelete, setEditCanDelete] = useState(false);
+  const [editCanViewChangelog, setEditCanViewChangelog] = useState(false);
   const [editError, setEditError] = useState("");
 
   function handleAdd() {
@@ -66,7 +68,7 @@ export function SettingsClient({
           password: addPassword,
           role: addRole,
         });
-        setUsers((prev) => [...prev, { ...user, canEdit: false, canDelete: false, lastLoginAt: null, createdAt: new Date() }]);
+        setUsers((prev) => [...prev, { ...user, canEdit: false, canDelete: false, canViewChangelog: false, lastLoginAt: null, createdAt: new Date() }]);
         setShowAdd(false);
         setAddName("");
         setAddEmail("");
@@ -88,6 +90,7 @@ export function SettingsClient({
     setEditPassword("");
     setEditCanEdit(user.canEdit);
     setEditCanDelete(user.canDelete);
+    setEditCanViewChangelog(user.canViewChangelog);
     setEditError("");
   }
 
@@ -109,6 +112,7 @@ export function SettingsClient({
           password?: string;
           canEdit?: boolean;
           canDelete?: boolean;
+          canViewChangelog?: boolean;
         } = {};
 
         if (editName !== current?.name) updates.name = editName;
@@ -117,6 +121,7 @@ export function SettingsClient({
         if (editPassword) updates.password = editPassword;
         if (editCanEdit !== current?.canEdit) updates.canEdit = editCanEdit;
         if (editCanDelete !== current?.canDelete) updates.canDelete = editCanDelete;
+        if (editCanViewChangelog !== current?.canViewChangelog) updates.canViewChangelog = editCanViewChangelog;
 
         if (Object.keys(updates).length > 0) {
           await updateUser(userId, updates);
@@ -130,6 +135,7 @@ export function SettingsClient({
                     role: editRole || u.role,
                     canEdit: editCanEdit,
                     canDelete: editCanDelete,
+                    canViewChangelog: editCanViewChangelog,
                   }
                 : u
             )
@@ -343,6 +349,17 @@ export function SettingsClient({
                             <span className="text-sm">Can delete reports</span>
                           </label>
                         </div>
+                        <div>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={editCanViewChangelog}
+                              onChange={(e) => setEditCanViewChangelog(e.target.checked)}
+                              className="rounded"
+                            />
+                            <span className="text-sm">Can view changelog</span>
+                          </label>
+                        </div>
                         <p className="text-xs text-muted-foreground">
                           Admins always have full access. These only apply to standard users.
                         </p>
@@ -403,6 +420,11 @@ export function SettingsClient({
                               {user.canDelete && (
                                 <span className="inline-flex items-center rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400">
                                   Can Delete
+                                </span>
+                              )}
+                              {user.canViewChangelog && (
+                                <span className="inline-flex items-center rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-medium text-purple-600 dark:text-purple-400">
+                                  Changelog
                                 </span>
                               )}
                             </>

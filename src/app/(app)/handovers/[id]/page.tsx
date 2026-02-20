@@ -162,6 +162,7 @@ export default async function HandoverReviewPage({
                     <th className="text-left py-2 font-medium">Size</th>
                     <th className="text-left py-2 font-medium">Depth</th>
                     <th className="text-left py-2 font-medium">Brand</th>
+                    <th className="text-left py-2 font-medium">Type</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -171,6 +172,7 @@ export default async function HandoverReviewPage({
                       <td className="py-2">{t.size || "-"}</td>
                       <td className="py-2">{t.depth || "-"}</td>
                       <td className="py-2">{t.brand || "-"}</td>
+                      <td className="py-2">{t.tyreType === "run_flat" ? "Run Flat" : "Normal"}</td>
                     </tr>
                   ))}
                 </tbody>

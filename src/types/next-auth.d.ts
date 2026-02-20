@@ -9,6 +9,7 @@ declare module "next-auth" {
       role: string;
       canEdit: boolean;
       canDelete: boolean;
+      canViewChangelog: boolean;
     };
   }
 }
@@ -19,5 +20,6 @@ declare module "next-auth/jwt" {
     role: string;
     canEdit: boolean;
     canDelete: boolean;
+    canViewChangelog: boolean;
   }
 }

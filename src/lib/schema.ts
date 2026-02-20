@@ -37,6 +37,7 @@ export const users = pgTable("users", {
   role: roleEnum("role").notNull().default("user"),
   canEdit: boolean("can_edit").notNull().default(false),
   canDelete: boolean("can_delete").notNull().default(false),
+  canViewChangelog: boolean("can_view_changelog").notNull().default(false),
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -88,6 +89,7 @@ export const tyreRecords = pgTable("tyre_records", {
   size: varchar("size", { length: 50 }),
   depth: varchar("depth", { length: 50 }),
   brand: varchar("brand", { length: 100 }),
+  tyreType: varchar("tyre_type", { length: 20 }).notNull().default("normal"),
 });
 
 export const handoverPhotos = pgTable("handover_photos", {

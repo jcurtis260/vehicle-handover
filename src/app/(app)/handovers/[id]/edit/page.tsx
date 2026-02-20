@@ -34,16 +34,17 @@ export default async function EditHandoverPage({
     };
   }
 
-  const tyresMap: Record<string, { size: string; depth: string; brand: string }> = {};
+  const tyresMap: Record<string, { size: string; depth: string; brand: string; tyreType: string }> = {};
   for (const t of handover.tyres) {
     tyresMap[t.position] = {
       size: t.size || "",
       depth: t.depth || "",
       brand: t.brand || "",
+      tyreType: t.tyreType || "normal",
     };
   }
   for (const pos of ["NSF", "NSR", "OSR", "OSF"]) {
-    if (!tyresMap[pos]) tyresMap[pos] = { size: "", depth: "", brand: "" };
+    if (!tyresMap[pos]) tyresMap[pos] = { size: "", depth: "", brand: "", tyreType: "normal" };
   }
 
   const photos = handover.photos.map((p) => ({

@@ -29,6 +29,7 @@ interface TyreState {
   size: string;
   depth: string;
   brand: string;
+  tyreType: string;
 }
 
 interface PhotoItem {
@@ -119,10 +120,11 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
     if (initialData?.tyres) return initialData.tyres;
     const init: Record<string, TyreState> = {};
     for (const pos of TYRE_POSITIONS) {
-      init[pos] = { size: "", depth: "", brand: "" };
+      init[pos] = { size: "", depth: "", brand: "", tyreType: "normal" };
     }
     return init;
   });
+  const [tyreError, setTyreError] = useState("");
 
   const [photos, setPhotos] = useState<PhotoItem[]>(initialData?.photos || []);
 
@@ -146,6 +148,19 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
       return;
     }
 
+    setTyreError("");
+    if (status === "completed") {
+      const incomplete = TYRE_POSITIONS.filter(
+        (pos) => !tyres[pos]?.size || !tyres[pos]?.depth || !tyres[pos]?.brand
+      );
+      if (incomplete.length > 0) {
+        setTyreError(
+          `Please complete tyre information for: ${incomplete.join(", ")}`
+        );
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const payload = {
@@ -167,6 +182,7 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
           size: tyres[pos]?.size || "",
           depth: tyres[pos]?.depth || "",
           brand: tyres[pos]?.brand || "",
+          tyreType: tyres[pos]?.tyreType || "normal",
         })),
         photos: photos.map((p) => ({
           url: p.url,
@@ -282,40 +298,69 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
         </div>
       </Section>
 
-      <Section title="Tyre Information" defaultOpen={false}>
+      <Section title="Tyre Information *" defaultOpen={false}>
+        {tyreError && (
+          <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
+            {tyreError}
+          </div>
+        )}
         <div className="space-y-4">
-          {TYRE_POSITIONS.map((pos) => (
-            <div key={pos} className="space-y-2">
-              <h4 className="text-sm font-semibold">{pos}</h4>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Size</label>
-                  <Input
-                    value={tyres[pos]?.size || ""}
-                    onChange={(e) => updateTyre(pos, "size", e.target.value)}
-                    placeholder="Size"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Depth</label>
-                  <Input
-                    value={tyres[pos]?.depth || ""}
-                    onChange={(e) => updateTyre(pos, "depth", e.target.value)}
-                    placeholder="Depth"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Brand</label>
-                  <Input
-                    value={tyres[pos]?.brand || ""}
-                    onChange={(e) => updateTyre(pos, "brand", e.target.value)}
-                    placeholder="Brand"
-                  />
+          {TYRE_POSITIONS.map((pos) => {
+            const t = tyres[pos];
+            const missing = !t?.size || !t?.depth || !t?.brand;
+            return (
+              <div
+                key={pos}
+                className={cn(
+                  "space-y-2 p-3 rounded-lg",
+                  missing ? "bg-warning/5 border border-warning/20" : "bg-muted/50"
+                )}
+              >
+                <h4 className="text-sm font-semibold">{pos}</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Size *</label>
+                    <Input
+                      value={t?.size || ""}
+                      onChange={(e) => updateTyre(pos, "size", e.target.value)}
+                      placeholder="e.g. 225/45R17"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Depth *</label>
+                    <Input
+                      value={t?.depth || ""}
+                      onChange={(e) => updateTyre(pos, "depth", e.target.value)}
+                      placeholder="e.g. 5mm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Brand *</label>
+                    <Input
+                      value={t?.brand || ""}
+                      onChange={(e) => updateTyre(pos, "brand", e.target.value)}
+                      placeholder="e.g. Michelin"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Type</label>
+                    <select
+                      value={t?.tyreType || "normal"}
+                      onChange={(e) => updateTyre(pos, "tyreType", e.target.value)}
+                      className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground"
+                    >
+                      <option value="normal">Normal</option>
+                      <option value="run_flat">Run Flat</option>
+                    </select>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
+        <p className="text-xs text-muted-foreground">
+          * All tyre fields must be completed before marking as complete.
+        </p>
       </Section>
 
       <Section title="Photos" defaultOpen={false}>

@@ -301,10 +301,11 @@ export async function generateHandoverPdf(
   drawSectionTitle(doc, "Tyre Information");
 
   const tyreCols = [
-    { label: "POSITION", x: LEFT + 6, w: 80 },
-    { label: "SIZE", x: LEFT + 90, w: 150 },
-    { label: "DEPTH", x: LEFT + 250, w: 120 },
-    { label: "BRAND", x: LEFT + 380, w: WIDTH - 386 },
+    { label: "POSITION", x: LEFT + 6, w: 65 },
+    { label: "SIZE", x: LEFT + 75, w: 120 },
+    { label: "DEPTH", x: LEFT + 200, w: 80 },
+    { label: "BRAND", x: LEFT + 285, w: 120 },
+    { label: "TYPE", x: LEFT + 410, w: WIDTH - 416 },
   ];
 
   const tthY = doc.y;
@@ -341,6 +342,12 @@ export async function generateHandoverPdf(
       width: tyreCols[3].w,
       lineBreak: false,
     });
+    doc.text(
+      tyre.tyreType === "run_flat" ? "Run Flat" : "Normal",
+      tyreCols[4].x,
+      rowY + 1,
+      { width: tyreCols[4].w, lineBreak: false }
+    );
 
     doc.y = rowY + 15;
     doc
