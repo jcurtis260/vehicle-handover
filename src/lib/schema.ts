@@ -27,6 +27,8 @@ export const photoCategoryEnum = pgEnum("photo_category", [
   "damage",
   "tyres",
   "other",
+  "v5",
+  "signature",
 ]);
 
 export const users = pgTable("users", {
@@ -66,6 +68,7 @@ export const handovers = pgTable("handovers", {
   mileage: integer("mileage"),
   otherComments: text("other_comments"),
   status: handoverStatusEnum("status").notNull().default("draft"),
+  type: varchar("type", { length: 20 }).notNull().default("collection"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

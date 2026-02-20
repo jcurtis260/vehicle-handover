@@ -42,6 +42,7 @@ interface HandoverInput {
   mileage: number | null;
   otherComments: string;
   status: "draft" | "completed";
+  type?: "collection" | "delivery";
   checks: CheckInput[];
   tyres: TyreInput[];
   photos?: PhotoInput[];
@@ -71,6 +72,7 @@ export async function createHandover(input: HandoverInput) {
       mileage: input.mileage,
       otherComments: input.otherComments || null,
       status: input.status,
+      type: input.type || "collection",
     })
     .returning();
 
@@ -109,7 +111,9 @@ export async function createHandover(input: HandoverInput) {
           | "interior"
           | "damage"
           | "tyres"
-          | "other",
+          | "other"
+          | "v5"
+          | "signature",
       }))
     );
   }
@@ -157,6 +161,7 @@ export async function updateHandover(
       mileage: input.mileage,
       otherComments: input.otherComments || null,
       status: input.status,
+      type: input.type || existing.type || "collection",
       updatedAt: new Date(),
     })
     .where(eq(handovers.id, handoverId));
@@ -207,7 +212,9 @@ export async function updateHandover(
           | "interior"
           | "damage"
           | "tyres"
-          | "other",
+          | "other"
+          | "v5"
+          | "signature",
       }))
     );
   }
@@ -311,6 +318,7 @@ export async function searchHandovers(query: string) {
       date: handovers.date,
       name: handovers.name,
       status: handovers.status,
+      type: handovers.type,
       mileage: handovers.mileage,
       vehicleMake: vehicles.make,
       vehicleModel: vehicles.model,

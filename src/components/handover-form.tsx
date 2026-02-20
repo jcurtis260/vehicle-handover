@@ -172,6 +172,7 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
         mileage: mileage ? parseInt(mileage) : null,
         otherComments,
         status,
+        type: "collection" as const,
         checks: CHECK_ITEMS.map((key) => ({
           checkItem: key,
           checked: checks[key]?.checked || false,

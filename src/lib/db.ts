@@ -15,6 +15,9 @@ async function runAutoMigrations() {
     await _sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_delete BOOLEAN NOT NULL DEFAULT false`;
     await _sql`ALTER TABLE tyre_records ADD COLUMN IF NOT EXISTS tyre_type VARCHAR(20) NOT NULL DEFAULT 'normal'`;
     await _sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_changelog BOOLEAN NOT NULL DEFAULT false`;
+    await _sql`ALTER TABLE handovers ADD COLUMN IF NOT EXISTS type VARCHAR(20) NOT NULL DEFAULT 'collection'`;
+    try { await _sql`ALTER TYPE photo_category ADD VALUE IF NOT EXISTS 'v5'`; } catch { /* already exists */ }
+    try { await _sql`ALTER TYPE photo_category ADD VALUE IF NOT EXISTS 'signature'`; } catch { /* already exists */ }
   } catch (err) {
     console.error("[AutoMigrate] Failed:", err);
   }

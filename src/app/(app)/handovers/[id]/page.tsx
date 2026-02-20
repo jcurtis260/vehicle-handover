@@ -4,11 +4,12 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PhotoGallery } from "@/components/photo-gallery";
-import { CHECK_ITEM_LABELS, type CheckItemKey } from "@/lib/check-items";
+import { CHECK_ITEM_LABELS, DELIVERY_CHECK_ITEM_LABELS, type CheckItemKey, type DeliveryCheckItemKey } from "@/lib/check-items";
 import { EmailModal } from "@/components/email-modal";
 import { DeleteHandoverButton } from "@/components/delete-handover-button";
 import {
@@ -33,9 +34,22 @@ export default async function HandoverReviewPage({
   const handover = await getHandover(id);
   if (!handover) notFound();
 
+  const isDelivery = handover.type === "delivery";
+
   const checksMap = new Map(
     handover.checks.map((c) => [c.checkItem, c])
   );
+
+  const signaturePhoto = handover.photos.find((p) => p.category === "signature");
+  const v5Photos = handover.photos.filter((p) => p.category === "v5");
+  const regularPhotos = handover.photos.filter(
+    (p) => p.category !== "signature" && p.category !== "v5"
+  );
+
+  const allLabels: Record<string, string> = {
+    ...CHECK_ITEM_LABELS,
+    ...DELIVERY_CHECK_ITEM_LABELS,
+  };
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -54,9 +68,14 @@ export default async function HandoverReviewPage({
             {new Date(handover.date).toLocaleDateString()}
           </p>
         </div>
-        <Badge variant={handover.status === "completed" ? "success" : "warning"}>
-          {handover.status}
-        </Badge>
+        <div className="flex items-center gap-2 shrink-0">
+          <Badge variant="outline">
+            {isDelivery ? "Delivery" : "Collection"}
+          </Badge>
+          <Badge variant={handover.status === "completed" ? "success" : "warning"}>
+            {handover.status}
+          </Badge>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -116,39 +135,45 @@ export default async function HandoverReviewPage({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Check Sheet</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-1">
-            {Array.from(checksMap.entries()).map(([key, check]) => (
-              <div
-                key={key}
-                className="flex items-start gap-3 py-2 border-b border-border last:border-0"
-              >
-                {check.checked ? (
-                  <CheckCircle className="h-5 w-5 text-success shrink-0 mt-0.5" />
-                ) : (
-                  <XCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">
-                    {CHECK_ITEM_LABELS[key as CheckItemKey] || key}
-                  </p>
-                  {check.comments && (
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {check.comments}
-                    </p>
+      {/* Check Sheet — works for both collection and delivery checks */}
+      {handover.checks.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">
+              {isDelivery ? "Vehicle Checks & Delivery Checklist" : "Check Sheet"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1">
+              {Array.from(checksMap.entries()).map(([key, check]) => (
+                <div
+                  key={key}
+                  className="flex items-start gap-3 py-2 border-b border-border last:border-0"
+                >
+                  {check.checked ? (
+                    <CheckCircle className="h-5 w-5 text-success shrink-0 mt-0.5" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
                   )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">
+                      {allLabels[key as CheckItemKey | DeliveryCheckItemKey] || key}
+                    </p>
+                    {check.comments && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {check.comments}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      {handover.tyres.length > 0 && (
+      {/* Tyre info — collection only */}
+      {!isDelivery && handover.tyres.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Tyre Information</CardTitle>
@@ -182,13 +207,64 @@ export default async function HandoverReviewPage({
         </Card>
       )}
 
-      {handover.photos.length > 0 && (
+      {/* V5 Document — delivery only */}
+      {isDelivery && v5Photos.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">V5 Document</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {v5Photos.map((photo) => (
+                <div key={photo.id} className="rounded-lg overflow-hidden border border-border">
+                  <Image
+                    src={photo.blobUrl}
+                    alt={photo.caption || "V5 Document"}
+                    width={500}
+                    height={350}
+                    className="w-full h-auto object-cover"
+                  />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Customer Signature — delivery only */}
+      {isDelivery && signaturePhoto && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Customer Signature</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {signaturePhoto.caption && (
+              <div>
+                <p className="text-xs text-muted-foreground">Signed by</p>
+                <p className="text-sm font-medium">{signaturePhoto.caption}</p>
+              </div>
+            )}
+            <div className="rounded-lg border border-border bg-white p-4 max-w-md">
+              <Image
+                src={signaturePhoto.blobUrl}
+                alt="Customer Signature"
+                width={600}
+                height={200}
+                className="w-full h-auto"
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Regular photos (collection photos, or any non-v5/non-signature) */}
+      {regularPhotos.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Photos</CardTitle>
           </CardHeader>
           <CardContent>
-            <PhotoGallery photos={handover.photos} />
+            <PhotoGallery photos={regularPhotos} />
           </CardContent>
         </Card>
       )}

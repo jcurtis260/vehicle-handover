@@ -53,6 +53,22 @@ export const CHECK_ITEMS = [
 
 export type CheckItemKey = (typeof CHECK_ITEMS)[number];
 
+export const DELIVERY_CHECK_ITEMS = [
+  "delivery_spare_keys",
+  "delivery_service_history",
+  "delivery_locking_wheel_nut",
+  "delivery_book_pack",
+] as const;
+
+export type DeliveryCheckItemKey = (typeof DELIVERY_CHECK_ITEMS)[number];
+
+export const DELIVERY_CHECK_ITEM_LABELS: Record<DeliveryCheckItemKey, string> = {
+  delivery_spare_keys: "Spare Keys Provided",
+  delivery_service_history: "Service History Provided (if applicable)",
+  delivery_locking_wheel_nut: "Locking Wheel Nut Location",
+  delivery_book_pack: "Book Pack / Owners Guide (if applicable)",
+};
+
 export const CHECK_ITEM_LABELS: Record<CheckItemKey, string> = {
   satisfactory_starting: "Satisfactory Starting, General Performance",
   battery_voltage: "Battery Voltage",

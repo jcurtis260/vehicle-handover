@@ -102,11 +102,16 @@ export default async function DashboardPage() {
                       </p>
                     </div>
                   </div>
-                  <Badge
-                    variant={h.status === "completed" ? "success" : "warning"}
-                  >
-                    {h.status}
-                  </Badge>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Badge variant="outline" className="text-[10px]">
+                      {h.type === "delivery" ? "Delivery" : "Collection"}
+                    </Badge>
+                    <Badge
+                      variant={h.status === "completed" ? "success" : "warning"}
+                    >
+                      {h.status}
+                    </Badge>
+                  </div>
                 </Link>
               ))}
             </div>

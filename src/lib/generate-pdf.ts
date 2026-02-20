@@ -7,7 +7,7 @@ import {
   handoverPhotos,
 } from "@/lib/schema";
 import { eq } from "drizzle-orm";
-import { CHECK_ITEM_LABELS, type CheckItemKey } from "@/lib/check-items";
+import { CHECK_ITEM_LABELS, DELIVERY_CHECK_ITEM_LABELS, type CheckItemKey, type DeliveryCheckItemKey } from "@/lib/check-items";
 import PDFDocument from "pdfkit";
 
 const BLACK = "#000000";
@@ -243,13 +243,16 @@ export async function generateHandoverPdf(
   // ── HEADER ──────────────────────────────────────────────
   drawHeader(doc);
 
+  const isDelivery = handover.type === "delivery";
+
   // ── STATUS + REPORT TITLE ─────────────────────────────
   const statusText = handover.status.toUpperCase();
   const statusColor = handover.status === "completed" ? GREEN : "#d97706";
   const statusBg = handover.status === "completed" ? "#dcfce7" : "#fef3c7";
 
+  const reportTitle = isDelivery ? "Vehicle Delivery Report" : "Vehicle Handover Report";
   doc.fontSize(15).font("Helvetica-Bold").fillColor(BLACK)
-    .text("Vehicle Handover Report", LEFT, doc.y, { lineBreak: false });
+    .text(reportTitle, LEFT, doc.y, { lineBreak: false });
 
   doc.fontSize(8).font("Helvetica-Bold");
   const statusW = doc.widthOfString(statusText) + 14;
@@ -290,128 +293,137 @@ export async function generateHandoverPdf(
 
   doc.y = detailBoxY + detailBoxH + 2;
 
-  // ── VEHICLE CHECKS ──────────────────────────────────────
-  drawSectionTitle(doc, "Vehicle Checks");
+  const allLabels: Record<string, string> = {
+    ...CHECK_ITEM_LABELS,
+    ...DELIVERY_CHECK_ITEM_LABELS,
+  };
 
-  const thY = doc.y;
-  doc.rect(LEFT, thY - 2, WIDTH, 14).fill(BLACK);
-  doc.fontSize(6.5).font("Helvetica-Bold").fillColor(WHITE);
-  doc.text("CHECK ITEM", LEFT + 22, thY + 1, { width: 280, lineBreak: false });
-  doc.text("COMMENTS", LEFT + 310, thY + 1, {
-    width: WIDTH - 316,
-    align: "right",
-    lineBreak: false,
-  });
-  doc.y = thY + 15;
+  // ── CHECKS (both types) ──────────────────────────────────
+  if (checks.length > 0) {
+    drawSectionTitle(doc, isDelivery ? "Vehicle Checks & Delivery Checklist" : "Vehicle Checks");
 
-  checks.forEach((check, i) => {
-    const label =
-      CHECK_ITEM_LABELS[check.checkItem as CheckItemKey] || check.checkItem;
+    const thY = doc.y;
+    doc.rect(LEFT, thY - 2, WIDTH, 14).fill(BLACK);
+    doc.fontSize(6.5).font("Helvetica-Bold").fillColor(WHITE);
+    doc.text("CHECK ITEM", LEFT + 22, thY + 1, { width: 280, lineBreak: false });
+    doc.text("COMMENTS", LEFT + 310, thY + 1, {
+      width: WIDTH - 316,
+      align: "right",
+      lineBreak: false,
+    });
+    doc.y = thY + 15;
 
-    doc.fontSize(8).font("Helvetica");
-    const labelH = doc.heightOfString(label, { width: 275 });
-    doc.fontSize(7);
-    const commentH = check.comments
-      ? doc.heightOfString(check.comments, { width: WIDTH - 320 })
-      : 0;
-    const rowH = Math.max(labelH, commentH, 11) + 4;
+    checks.forEach((check, i) => {
+      const label =
+        allLabels[check.checkItem as CheckItemKey | DeliveryCheckItemKey] || check.checkItem;
 
-    ensureSpace(doc, rowH + 1);
+      doc.fontSize(8).font("Helvetica");
+      const labelH = doc.heightOfString(label, { width: 275 });
+      doc.fontSize(7);
+      const commentH = check.comments
+        ? doc.heightOfString(check.comments, { width: WIDTH - 320 })
+        : 0;
+      const rowH = Math.max(labelH, commentH, 11) + 4;
 
-    const rowY = doc.y;
+      ensureSpace(doc, rowH + 1);
 
-    if (i % 2 === 0) {
-      doc.rect(LEFT, rowY - 1, WIDTH, rowH).fill(LIGHT_BG);
-    }
+      const rowY = doc.y;
 
-    drawCheckbox(doc, LEFT + 6, rowY, check.checked);
+      if (i % 2 === 0) {
+        doc.rect(LEFT, rowY - 1, WIDTH, rowH).fill(LIGHT_BG);
+      }
 
-    doc
-      .fontSize(8)
-      .font("Helvetica")
-      .fillColor(DARK)
-      .text(label, LEFT + 22, rowY, { width: 275 });
+      drawCheckbox(doc, LEFT + 6, rowY, check.checked);
 
-    if (check.comments) {
       doc
-        .fontSize(7)
-        .fillColor(GRAY)
-        .text(check.comments, LEFT + 310, rowY + 1, {
-          width: WIDTH - 316,
-          align: "right",
-        });
-    }
+        .fontSize(8)
+        .font("Helvetica")
+        .fillColor(DARK)
+        .text(label, LEFT + 22, rowY, { width: 275 });
 
-    doc.y = rowY + rowH;
+      if (check.comments) {
+        doc
+          .fontSize(7)
+          .fillColor(GRAY)
+          .text(check.comments, LEFT + 310, rowY + 1, {
+            width: WIDTH - 316,
+            align: "right",
+          });
+      }
 
-    doc
-      .moveTo(LEFT, doc.y)
-      .lineTo(RIGHT, doc.y)
-      .strokeColor("#e5e7eb")
-      .lineWidth(0.3)
-      .stroke();
-  });
+      doc.y = rowY + rowH;
 
-  // ── TYRE INFORMATION ────────────────────────────────────
-  drawSectionTitle(doc, "Tyre Information");
-
-  const tyreCols = [
-    { label: "POSITION", x: LEFT + 6, w: 65 },
-    { label: "SIZE", x: LEFT + 75, w: 120 },
-    { label: "DEPTH", x: LEFT + 200, w: 80 },
-    { label: "BRAND", x: LEFT + 285, w: 120 },
-    { label: "TYPE", x: LEFT + 410, w: WIDTH - 416 },
-  ];
-
-  const tthY = doc.y;
-  doc.rect(LEFT, tthY - 2, WIDTH, 14).fill(BLACK);
-  doc.fontSize(6.5).font("Helvetica-Bold").fillColor(WHITE);
-  tyreCols.forEach((c) =>
-    doc.text(c.label, c.x, tthY + 1, { width: c.w, lineBreak: false })
-  );
-  doc.y = tthY + 15;
-
-  tyres.forEach((tyre, i) => {
-    ensureSpace(doc, 16);
-    const rowY = doc.y;
-
-    if (i % 2 === 0) {
-      doc.rect(LEFT, rowY - 1, WIDTH, 15).fill(LIGHT_BG);
-    }
-
-    doc.fontSize(8).font("Helvetica-Bold").fillColor(DARK);
-    doc.text(tyre.position, tyreCols[0].x, rowY + 1, {
-      width: tyreCols[0].w,
-      lineBreak: false,
+      doc
+        .moveTo(LEFT, doc.y)
+        .lineTo(RIGHT, doc.y)
+        .strokeColor("#e5e7eb")
+        .lineWidth(0.3)
+        .stroke();
     });
-    doc.font("Helvetica").fillColor(DARK);
-    doc.text(tyre.size || "-", tyreCols[1].x, rowY + 1, {
-      width: tyreCols[1].w,
-      lineBreak: false,
-    });
-    doc.text(tyre.depth || "-", tyreCols[2].x, rowY + 1, {
-      width: tyreCols[2].w,
-      lineBreak: false,
-    });
-    doc.text(tyre.brand || "-", tyreCols[3].x, rowY + 1, {
-      width: tyreCols[3].w,
-      lineBreak: false,
-    });
-    doc.text(
-      tyre.tyreType === "run_flat" ? "Run Flat" : "Normal",
-      tyreCols[4].x,
-      rowY + 1,
-      { width: tyreCols[4].w, lineBreak: false }
+  }
+
+  // ── TYRE INFORMATION (collection only) ──────────────────
+  if (!isDelivery && tyres.length > 0) {
+    drawSectionTitle(doc, "Tyre Information");
+
+    const tyreCols = [
+      { label: "POSITION", x: LEFT + 6, w: 65 },
+      { label: "SIZE", x: LEFT + 75, w: 120 },
+      { label: "DEPTH", x: LEFT + 200, w: 80 },
+      { label: "BRAND", x: LEFT + 285, w: 120 },
+      { label: "TYPE", x: LEFT + 410, w: WIDTH - 416 },
+    ];
+
+    const tthY = doc.y;
+    doc.rect(LEFT, tthY - 2, WIDTH, 14).fill(BLACK);
+    doc.fontSize(6.5).font("Helvetica-Bold").fillColor(WHITE);
+    tyreCols.forEach((c) =>
+      doc.text(c.label, c.x, tthY + 1, { width: c.w, lineBreak: false })
     );
+    doc.y = tthY + 15;
 
-    doc.y = rowY + 15;
-    doc
-      .moveTo(LEFT, doc.y)
-      .lineTo(RIGHT, doc.y)
-      .strokeColor("#e5e7eb")
-      .lineWidth(0.3)
-      .stroke();
-  });
+    tyres.forEach((tyre, i) => {
+      ensureSpace(doc, 16);
+      const rowY = doc.y;
+
+      if (i % 2 === 0) {
+        doc.rect(LEFT, rowY - 1, WIDTH, 15).fill(LIGHT_BG);
+      }
+
+      doc.fontSize(8).font("Helvetica-Bold").fillColor(DARK);
+      doc.text(tyre.position, tyreCols[0].x, rowY + 1, {
+        width: tyreCols[0].w,
+        lineBreak: false,
+      });
+      doc.font("Helvetica").fillColor(DARK);
+      doc.text(tyre.size || "-", tyreCols[1].x, rowY + 1, {
+        width: tyreCols[1].w,
+        lineBreak: false,
+      });
+      doc.text(tyre.depth || "-", tyreCols[2].x, rowY + 1, {
+        width: tyreCols[2].w,
+        lineBreak: false,
+      });
+      doc.text(tyre.brand || "-", tyreCols[3].x, rowY + 1, {
+        width: tyreCols[3].w,
+        lineBreak: false,
+      });
+      doc.text(
+        tyre.tyreType === "run_flat" ? "Run Flat" : "Normal",
+        tyreCols[4].x,
+        rowY + 1,
+        { width: tyreCols[4].w, lineBreak: false }
+      );
+
+      doc.y = rowY + 15;
+      doc
+        .moveTo(LEFT, doc.y)
+        .lineTo(RIGHT, doc.y)
+        .strokeColor("#e5e7eb")
+        .lineWidth(0.3)
+        .stroke();
+    });
+  }
 
   // ── OTHER COMMENTS ──────────────────────────────────────
   if (handover.otherComments) {
@@ -442,8 +454,73 @@ export async function generateHandoverPdf(
     doc.y = boxY + boxH + 4;
   }
 
-  // ── PHOTOS ──────────────────────────────────────────────
-  if (photos.length > 0) {
+  // ── V5 DOCUMENT (delivery only) ─────────────────────────
+  if (isDelivery) {
+    const v5Photos = photos.filter((p) => p.category === "v5");
+    if (v5Photos.length > 0) {
+      drawSectionTitle(doc, "V5 Document");
+      for (const photo of v5Photos) {
+        ensureSpace(doc, 280);
+        const imgBuffer = await fetchImageBuffer(photo.blobUrl);
+        if (imgBuffer) {
+          try {
+            doc.image(imgBuffer, LEFT, doc.y, {
+              fit: [WIDTH, 260],
+              align: "center",
+            });
+            doc.y += 265;
+          } catch {
+            doc.fontSize(8).fillColor(LIGHT_GRAY)
+              .text("[V5 image unavailable]", LEFT, doc.y, { lineBreak: false });
+            doc.y += 14;
+          }
+        }
+      }
+    }
+  }
+
+  // ── SIGNATURE (delivery only) ───────────────────────────
+  if (isDelivery) {
+    const signaturePhoto = photos.find((p) => p.category === "signature");
+    if (signaturePhoto) {
+      ensureSpace(doc, 180);
+      drawSectionTitle(doc, "Customer Signature");
+
+      if (signaturePhoto.caption) {
+        doc.fontSize(8).font("Helvetica").fillColor(GRAY)
+          .text("Signed by:", LEFT, doc.y, { lineBreak: false });
+        doc.fontSize(10).font("Helvetica-Bold").fillColor(DARK)
+          .text(signaturePhoto.caption, LEFT + 55, doc.y, { lineBreak: false });
+        doc.y += 18;
+      }
+
+      const sigBuffer = await fetchImageBuffer(signaturePhoto.blobUrl);
+      if (sigBuffer) {
+        const sigBoxW = 300;
+        const sigBoxH = 100;
+        doc
+          .roundedRect(LEFT, doc.y, sigBoxW, sigBoxH, 3)
+          .fillAndStroke(WHITE, BORDER);
+        try {
+          doc.image(sigBuffer, LEFT + 4, doc.y + 4, {
+            fit: [sigBoxW - 8, sigBoxH - 8],
+            align: "center",
+            valign: "center",
+          });
+        } catch {
+          // ignore
+        }
+        doc.y += sigBoxH + 8;
+      }
+    }
+  }
+
+  // ── PHOTOS (non-v5, non-signature) ──────────────────────
+  const regularPhotos = isDelivery
+    ? photos.filter((p) => p.category !== "v5" && p.category !== "signature")
+    : photos;
+
+  if (regularPhotos.length > 0) {
     doc.addPage();
     drawPhotoPageHeader(doc);
 
@@ -451,8 +528,8 @@ export async function generateHandoverPdf(
       .text("Photos", LEFT, doc.y, { lineBreak: false });
     doc.y += 20;
 
-    const grouped: Record<string, typeof photos> = {};
-    for (const photo of photos) {
+    const grouped: Record<string, typeof regularPhotos> = {};
+    for (const photo of regularPhotos) {
       const cat = photo.category || "other";
       if (!grouped[cat]) grouped[cat] = [];
       grouped[cat].push(photo);
@@ -561,6 +638,6 @@ export async function generateHandoverPdf(
   const buffer = await pdfReady;
   return {
     buffer,
-    filename: `${vehicle.registration}-handover.pdf`,
+    filename: `${vehicle.registration}-${isDelivery ? "delivery" : "handover"}.pdf`,
   };
 }

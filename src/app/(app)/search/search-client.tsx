@@ -69,6 +69,7 @@ export function SearchClient() {
                     <th className="text-left p-3 font-medium">Registration</th>
                     <th className="text-left p-3 font-medium">Date</th>
                     <th className="text-left p-3 font-medium">Inspector</th>
+                    <th className="text-left p-3 font-medium">Type</th>
                     <th className="text-left p-3 font-medium">Status</th>
                   </tr>
                 </thead>
@@ -88,6 +89,11 @@ export function SearchClient() {
                         {new Date(r.date).toLocaleDateString()}
                       </td>
                       <td className="p-3">{r.name}</td>
+                      <td className="p-3">
+                        <Badge variant="outline" className="text-[10px]">
+                          {r.type === "delivery" ? "Delivery" : "Collection"}
+                        </Badge>
+                      </td>
                       <td className="p-3">
                         <Badge
                           variant={r.status === "completed" ? "success" : "warning"}
@@ -115,13 +121,18 @@ export function SearchClient() {
                           {r.vehicleMake} {r.vehicleModel}
                         </span>
                       </div>
-                      <Badge
-                        variant={
-                          r.status === "completed" ? "success" : "warning"
-                        }
-                      >
-                        {r.status}
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="outline" className="text-[10px]">
+                          {r.type === "delivery" ? "Delivery" : "Collection"}
+                        </Badge>
+                        <Badge
+                          variant={
+                            r.status === "completed" ? "success" : "warning"
+                          }
+                        >
+                          {r.status}
+                        </Badge>
+                      </div>
                     </div>
                     <p className="text-sm text-muted-foreground">
                       {r.vehicleRegistration} &middot;{" "}

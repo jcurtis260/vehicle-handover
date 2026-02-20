@@ -39,7 +39,9 @@ export async function POST(request: NextRequest) {
             | "interior"
             | "damage"
             | "tyres"
-            | "other",
+            | "other"
+            | "v5"
+            | "signature",
         })
         .returning();
 
