@@ -3,8 +3,8 @@ import { Providers } from "@/components/providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Vehicle Handover",
-  description: "Vehicle handover check sheet management system",
+  title: "Twelve London Road - Vehicle Handover",
+  description: "Vehicle handover check sheet management system — Twelve London Road",
 };
 
 export const viewport: Viewport = {

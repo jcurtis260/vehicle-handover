@@ -10,10 +10,12 @@ import { eq } from "drizzle-orm";
 import { CHECK_ITEM_LABELS, type CheckItemKey } from "@/lib/check-items";
 import PDFDocument from "pdfkit";
 
-const BLUE = "#1a56db";
-const DARK = "#1f2937";
-const GRAY = "#6b7280";
-const LIGHT_BG = "#f3f4f6";
+const BLACK = "#000000";
+const DARK = "#1a1a1a";
+const GRAY = "#666666";
+const LIGHT_GRAY = "#999999";
+const BORDER = "#d4d4d4";
+const LIGHT_BG = "#f5f5f5";
 const WHITE = "#ffffff";
 const GREEN = "#16a34a";
 const RED = "#dc2626";
@@ -21,6 +23,10 @@ const LEFT = 40;
 const RIGHT = 555;
 const WIDTH = RIGHT - LEFT;
 const BOTTOM = 780;
+
+const COMPANY_NAME = "12 LONDON RD";
+const COMPANY_ADDRESS = "Hamilton Court, Carthouse Lane, Horsell, GU21 4XS";
+const COMPANY_PHONE = "Tel: 01276 473359";
 
 type Doc = InstanceType<typeof PDFDocument>;
 
@@ -41,20 +47,79 @@ function ensureSpace(doc: Doc, needed: number) {
   }
 }
 
+function drawLogo(doc: Doc, x: number, y: number, color: string, scale = 1) {
+  doc.save();
+  doc.fillColor(color);
+  const s12 = 11 * scale;
+  const sLondon = 18 * scale;
+  const sRd = 10 * scale;
+
+  doc.fontSize(s12).font("Helvetica");
+  const w12 = doc.widthOfString("12");
+  doc.text("12", x, y + (sLondon - s12) * 0.55, { lineBreak: false });
+
+  const xL = x + w12 + 5 * scale;
+  doc.fontSize(sLondon).font("Helvetica-Bold");
+  const wL = doc.widthOfString("LONDON");
+  doc.text("LONDON", xL, y, { lineBreak: false });
+
+  const xR = xL + wL + 4 * scale;
+  doc.fontSize(sRd).font("Helvetica");
+  doc.text("RD", xR, y + (sLondon - sRd) * 0.45, { lineBreak: false });
+
+  doc.restore();
+}
+
+function drawHeader(doc: Doc) {
+  const headerH = 64;
+  doc.rect(0, 0, 595.28, headerH).fill(BLACK);
+
+  drawLogo(doc, LEFT, 20, WHITE);
+
+  doc.fontSize(7.5).font("Helvetica").fillColor("#cccccc");
+  doc.text(COMPANY_ADDRESS, LEFT, 22, {
+    width: WIDTH,
+    align: "right",
+    lineBreak: false,
+  });
+  doc.text(COMPANY_PHONE, LEFT, 34, {
+    width: WIDTH,
+    align: "right",
+    lineBreak: false,
+  });
+
+  doc.y = headerH + 10;
+}
+
+function drawPhotoPageHeader(doc: Doc) {
+  const headerH = 48;
+  doc.rect(0, 0, 595.28, headerH).fill(BLACK);
+  drawLogo(doc, LEFT, 14, WHITE, 0.85);
+
+  doc.fontSize(7).font("Helvetica").fillColor("#cccccc");
+  doc.text(`${COMPANY_ADDRESS}  |  ${COMPANY_PHONE}`, LEFT, 20, {
+    width: WIDTH,
+    align: "right",
+    lineBreak: false,
+  });
+
+  doc.y = headerH + 10;
+}
+
 function drawSectionTitle(doc: Doc, title: string) {
   ensureSpace(doc, 26);
   doc.y += 8;
   doc
     .fontSize(11)
     .font("Helvetica-Bold")
-    .fillColor(BLUE)
+    .fillColor(BLACK)
     .text(title, LEFT, doc.y, { lineBreak: false });
   const lineY = doc.y + 14;
   doc
     .moveTo(LEFT, lineY)
     .lineTo(RIGHT, lineY)
-    .strokeColor(BLUE)
-    .lineWidth(1)
+    .strokeColor(BLACK)
+    .lineWidth(0.8)
     .stroke();
   doc.y = lineY + 6;
 }
@@ -99,14 +164,13 @@ function writeFooter(
   doc
     .moveTo(LEFT, BOTTOM + 4)
     .lineTo(RIGHT, BOTTOM + 4)
-    .strokeColor("#d1d5db")
+    .strokeColor(BORDER)
     .lineWidth(0.5)
     .stroke();
 
   const footerY = BOTTOM + 10;
-  doc.fontSize(7).font("Helvetica").fillColor("#9ca3af");
+  doc.fontSize(7).font("Helvetica").fillColor(LIGHT_GRAY);
 
-  // Use save/restore to prevent pdfkit from tracking text flow
   doc.save();
   doc.text(`Page ${pageIndex + 1} of ${totalPages}`, LEFT, footerY, {
     width: WIDTH / 3,
@@ -177,38 +241,30 @@ export async function generateHandoverPdf(
   });
 
   // ── HEADER ──────────────────────────────────────────────
-  doc.rect(0, 0, 595.28, 72).fill(BLUE);
+  drawHeader(doc);
 
-  doc
-    .fontSize(20)
-    .font("Helvetica-Bold")
-    .fillColor(WHITE)
-    .text("12LR Check Sheet", LEFT, 18, { lineBreak: false });
-  doc
-    .fontSize(9)
-    .font("Helvetica")
-    .fillColor("#bfdbfe")
-    .text("Vehicle Handover Report", LEFT, 42, { lineBreak: false });
-
+  // ── STATUS + REPORT TITLE ─────────────────────────────
   const statusText = handover.status.toUpperCase();
-  const statusColor = handover.status === "completed" ? "#bbf7d0" : "#fde68a";
-  doc.fontSize(9).font("Helvetica-Bold");
-  const statusWidth = doc.widthOfString(statusText) + 16;
-  doc
-    .roundedRect(RIGHT - statusWidth, 22, statusWidth, 22, 4)
-    .fill(statusColor);
-  doc
-    .fillColor(DARK)
-    .text(statusText, RIGHT - statusWidth + 8, 28, { lineBreak: false });
+  const statusColor = handover.status === "completed" ? GREEN : "#d97706";
+  const statusBg = handover.status === "completed" ? "#dcfce7" : "#fef3c7";
 
-  doc.y = 84;
+  doc.fontSize(15).font("Helvetica-Bold").fillColor(BLACK)
+    .text("Vehicle Handover Report", LEFT, doc.y, { lineBreak: false });
+
+  doc.fontSize(8).font("Helvetica-Bold");
+  const statusW = doc.widthOfString(statusText) + 14;
+  doc.roundedRect(RIGHT - statusW, doc.y - 2, statusW, 18, 3).fill(statusBg);
+  doc.fillColor(statusColor)
+    .text(statusText, RIGHT - statusW + 7, doc.y + 3, { lineBreak: false });
+
+  doc.y += 22;
 
   // ── VEHICLE DETAILS ─────────────────────────────────────
   const detailBoxH = 52;
   const detailBoxY = doc.y;
   doc
     .roundedRect(LEFT, detailBoxY, WIDTH, detailBoxH, 4)
-    .fillAndStroke(LIGHT_BG, "#d1d5db");
+    .fillAndStroke(LIGHT_BG, BORDER);
 
   const fields: [string, string][] = [
     ["Date", new Date(handover.date).toLocaleDateString("en-GB")],
@@ -237,9 +293,8 @@ export async function generateHandoverPdf(
   // ── VEHICLE CHECKS ──────────────────────────────────────
   drawSectionTitle(doc, "Vehicle Checks");
 
-  // Table header
   const thY = doc.y;
-  doc.rect(LEFT, thY - 2, WIDTH, 14).fill(DARK);
+  doc.rect(LEFT, thY - 2, WIDTH, 14).fill(BLACK);
   doc.fontSize(6.5).font("Helvetica-Bold").fillColor(WHITE);
   doc.text("CHECK ITEM", LEFT + 22, thY + 1, { width: 280, lineBreak: false });
   doc.text("COMMENTS", LEFT + 310, thY + 1, {
@@ -266,7 +321,7 @@ export async function generateHandoverPdf(
     const rowY = doc.y;
 
     if (i % 2 === 0) {
-      doc.rect(LEFT, rowY - 1, WIDTH, rowH).fill("#f9fafb");
+      doc.rect(LEFT, rowY - 1, WIDTH, rowH).fill(LIGHT_BG);
     }
 
     drawCheckbox(doc, LEFT + 6, rowY, check.checked);
@@ -309,7 +364,7 @@ export async function generateHandoverPdf(
   ];
 
   const tthY = doc.y;
-  doc.rect(LEFT, tthY - 2, WIDTH, 14).fill(DARK);
+  doc.rect(LEFT, tthY - 2, WIDTH, 14).fill(BLACK);
   doc.fontSize(6.5).font("Helvetica-Bold").fillColor(WHITE);
   tyreCols.forEach((c) =>
     doc.text(c.label, c.x, tthY + 1, { width: c.w, lineBreak: false })
@@ -321,7 +376,7 @@ export async function generateHandoverPdf(
     const rowY = doc.y;
 
     if (i % 2 === 0) {
-      doc.rect(LEFT, rowY - 1, WIDTH, 15).fill("#f9fafb");
+      doc.rect(LEFT, rowY - 1, WIDTH, 15).fill(LIGHT_BG);
     }
 
     doc.fontSize(8).font("Helvetica-Bold").fillColor(DARK);
@@ -373,7 +428,7 @@ export async function generateHandoverPdf(
     const boxY = doc.y;
     doc
       .roundedRect(LEFT, boxY, WIDTH, boxH, 3)
-      .fillAndStroke(LIGHT_BG, "#d1d5db");
+      .fillAndStroke(LIGHT_BG, BORDER);
 
     doc
       .fontSize(9)
@@ -390,14 +445,11 @@ export async function generateHandoverPdf(
   // ── PHOTOS ──────────────────────────────────────────────
   if (photos.length > 0) {
     doc.addPage();
+    drawPhotoPageHeader(doc);
 
-    doc.rect(0, 0, 595.28, 44).fill(BLUE);
-    doc
-      .fontSize(14)
-      .font("Helvetica-Bold")
-      .fillColor(WHITE)
-      .text("Photos", LEFT, 14, { lineBreak: false });
-    doc.y = 56;
+    doc.fontSize(13).font("Helvetica-Bold").fillColor(BLACK)
+      .text("Photos", LEFT, doc.y, { lineBreak: false });
+    doc.y += 20;
 
     const grouped: Record<string, typeof photos> = {};
     for (const photo of photos) {
@@ -406,9 +458,11 @@ export async function generateHandoverPdf(
       grouped[cat].push(photo);
     }
 
-    const imgW = 248;
-    const imgH = 186;
-    const gap = 18;
+    const imgW = 245;
+    const imgH = 184;
+    const colGap = 25;
+    const rowGap = 8;
+    const captionSpace = 14;
 
     for (const [category, catPhotos] of Object.entries(grouped)) {
       ensureSpace(doc, 30);
@@ -416,70 +470,80 @@ export async function generateHandoverPdf(
       doc
         .fontSize(10)
         .font("Helvetica-Bold")
-        .fillColor(DARK)
+        .fillColor(BLACK)
         .text(
           category.charAt(0).toUpperCase() + category.slice(1),
           LEFT,
           doc.y,
           { lineBreak: false }
         );
-      doc.y += 16;
+      doc.y += 14;
 
       let col = 0;
+      let rowStartY = doc.y;
 
       for (const photo of catPhotos) {
-        if (col === 0 && doc.y + imgH + 24 > BOTTOM) {
+        const totalSlotH = imgH + captionSpace + rowGap;
+
+        if (col === 0 && rowStartY + totalSlotH > BOTTOM) {
           doc.addPage();
           doc.y = LEFT;
+          rowStartY = doc.y;
         }
 
-        const x = LEFT + col * (imgW + gap);
-        const currentRowY = doc.y;
+        const x = col === 0 ? LEFT : LEFT + imgW + colGap;
         const imgBuffer = await fetchImageBuffer(photo.blobUrl);
 
+        doc.save();
         doc
-          .roundedRect(x, currentRowY, imgW, imgH, 3)
-          .fillAndStroke(LIGHT_BG, "#d1d5db");
+          .roundedRect(x, rowStartY, imgW, imgH, 3)
+          .fillAndStroke(LIGHT_BG, BORDER);
+        doc.restore();
 
         if (imgBuffer) {
           try {
-            doc.image(imgBuffer, x + 1, currentRowY + 1, {
-              fit: [imgW - 2, imgH - 2],
+            doc.image(imgBuffer, x + 2, rowStartY + 2, {
+              fit: [imgW - 4, imgH - 4],
               align: "center",
               valign: "center",
             });
           } catch {
+            doc.save();
             doc
               .fontSize(8)
-              .fillColor(GRAY)
-              .text("[Could not render]", x + 10, currentRowY + imgH / 2, {
+              .fillColor(LIGHT_GRAY)
+              .text("[Image unavailable]", x + 10, rowStartY + imgH / 2, {
                 lineBreak: false,
               });
+            doc.restore();
           }
         }
 
         if (photo.caption) {
+          doc.save();
           doc
             .fontSize(7)
             .font("Helvetica")
             .fillColor(GRAY)
-            .text(photo.caption, x, currentRowY + imgH + 3, {
+            .text(photo.caption, x, rowStartY + imgH + 3, {
               width: imgW,
               lineBreak: false,
             });
+          doc.restore();
         }
 
         col++;
         if (col >= 2) {
           col = 0;
-          doc.y = currentRowY + imgH + 18;
+          rowStartY = rowStartY + totalSlotH;
+          doc.y = rowStartY;
         }
       }
 
       if (col !== 0) {
-        doc.y += imgH + 18;
+        doc.y = rowStartY + imgH + captionSpace + rowGap;
       }
-      doc.y += 6;
+      doc.y += 4;
     }
   }
 

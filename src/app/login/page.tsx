@@ -3,9 +3,9 @@
 import { useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Car } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Logo } from "@/components/logo";
 
 const REMEMBER_KEY = "vh_remember_email";
 
@@ -52,74 +52,101 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4 bg-background">
-      <div className="w-full max-w-sm space-y-8">
-        <div className="text-center space-y-2">
-          <div className="flex justify-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-              <Car className="h-7 w-7" />
+    <div className="flex min-h-screen flex-col bg-black">
+      <div className="relative z-10 flex flex-1 items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md">
+          {/* Logo */}
+          <div className="mb-12 text-center">
+            <div className="flex justify-center mb-6">
+              <Logo className="w-80 h-auto" color="white" />
             </div>
+            <div className="h-px w-16 mx-auto bg-white/30 mb-4" />
+            <p className="text-xs tracking-[0.25em] uppercase text-neutral-400">
+              Vehicle Handover System
+            </p>
           </div>
-          <h1 className="text-2xl font-bold">Vehicle Handover</h1>
-          <p className="text-sm text-muted-foreground">
-            Sign in to manage vehicle handovers
-          </p>
+
+          {/* Login card */}
+          <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-8">
+            <h2 className="mb-6 text-base font-medium text-white">
+              Sign in to your account
+            </h2>
+
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {error && (
+                <div className="rounded-lg border border-red-500/30 bg-red-950 p-3 text-sm text-red-400">
+                  {error}
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label htmlFor="email" className="text-sm font-medium text-neutral-300">
+                  Email
+                </label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                  className="border-neutral-700 bg-neutral-800 text-white placeholder:text-neutral-500 focus-visible:ring-white/40 focus-visible:border-neutral-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="password" className="text-sm font-medium text-neutral-300">
+                  Password
+                </label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                  className="border-neutral-700 bg-neutral-800 text-white placeholder:text-neutral-500 focus-visible:ring-white/40 focus-visible:border-neutral-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  id="remember"
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
+                  className="h-4 w-4 rounded border-neutral-600 bg-neutral-800 text-white focus:ring-white/30 accent-white"
+                />
+                <label
+                  htmlFor="remember"
+                  className="cursor-pointer select-none text-sm text-neutral-400"
+                >
+                  Remember me
+                </label>
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full bg-white text-black font-semibold hover:bg-neutral-200 focus-visible:ring-white/30"
+                disabled={loading}
+              >
+                {loading ? "Signing in..." : "Sign In"}
+              </Button>
+            </form>
+          </div>
+
+          {/* Footer */}
+          <div className="mt-10 text-center space-y-1.5">
+            <p className="text-[11px] text-neutral-500 leading-relaxed">
+              Hamilton Court, Carthouse Lane, Horsell, GU21 4XS
+            </p>
+            <p className="text-[11px] text-neutral-500">
+              Tel: 01276 473359
+            </p>
+          </div>
         </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-              {error}
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium">
-              Email
-            </label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label htmlFor="password" className="text-sm font-medium">
-              Password
-            </label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              id="remember"
-              type="checkbox"
-              checked={remember}
-              onChange={(e) => setRemember(e.target.checked)}
-              className="h-4 w-4 rounded border-border text-primary focus:ring-primary accent-primary"
-            />
-            <label htmlFor="remember" className="text-sm text-muted-foreground select-none cursor-pointer">
-              Remember me
-            </label>
-          </div>
-
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Signing in..." : "Sign In"}
-          </Button>
-        </form>
       </div>
     </div>
   );

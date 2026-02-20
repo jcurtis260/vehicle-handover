@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
+import { Logo } from "./logo";
 import {
   LayoutDashboard,
   ClipboardPlus,
   Search,
   Settings,
   LogOut,
-  Car,
   FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -30,9 +30,8 @@ export function Sidebar() {
 
   return (
     <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:border-r border-border bg-card h-screen sticky top-0">
-      <div className="flex items-center gap-2 p-6 border-b border-border">
-        <Car className="h-6 w-6 text-primary" />
-        <span className="text-lg font-bold">Vehicle Handover</span>
+      <div className="flex items-center justify-center p-5 border-b border-border">
+        <Logo className="w-44 h-auto" color="currentColor" />
       </div>
 
       <nav className="flex-1 p-4 space-y-1">
