@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
@@ -62,18 +62,29 @@ function Section({
   title,
   children,
   defaultOpen = false,
+  isOpen,
+  onToggle,
 }: {
   title: string;
   children: React.ReactNode;
   defaultOpen?: boolean;
+  isOpen?: boolean;
+  onToggle?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [internalOpen, setInternalOpen] = useState(defaultOpen);
+  const open = isOpen !== undefined ? isOpen : internalOpen;
+
+  function handleToggle() {
+    const next = !open;
+    if (onToggle) onToggle(next);
+    else setInternalOpen(next);
+  }
 
   return (
     <div className="border border-border rounded-xl overflow-hidden">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={handleToggle}
         className="flex w-full items-center justify-between p-4 text-left font-semibold bg-card hover:bg-accent/50 transition-colors min-h-[52px]"
       >
         {title}
@@ -125,6 +136,8 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
     return init;
   });
   const [tyreError, setTyreError] = useState("");
+  const [tyresOpen, setTyresOpen] = useState(false);
+  const tyresSectionRef = useRef<HTMLDivElement>(null);
 
   const [photos, setPhotos] = useState<PhotoItem[]>(initialData?.photos || []);
 
@@ -157,6 +170,10 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
         setTyreError(
           `Please complete tyre information for: ${incomplete.join(", ")}`
         );
+        setTyresOpen(true);
+        setTimeout(() => {
+          tyresSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 100);
         return;
       }
     }
@@ -299,7 +316,8 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
         </div>
       </Section>
 
-      <Section title="Tyre Information *" defaultOpen={false}>
+      <div ref={tyresSectionRef}>
+      <Section title="Tyre Information *" isOpen={tyresOpen} onToggle={setTyresOpen}>
         {tyreError && (
           <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
             {tyreError}
@@ -363,6 +381,7 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
           * All tyre fields must be completed before marking as complete.
         </p>
       </Section>
+      </div>
 
       <Section title="Photos" defaultOpen={false}>
         <PhotoCapture

@@ -286,7 +286,7 @@ export function DeliveryForm({ mode, handoverId, initialData }: DeliveryFormProp
         </div>
       </Section>
 
-      <Section title="Delivery Checklist" defaultOpen={true}>
+      <Section title="Delivery Checklist" defaultOpen={false}>
         <div className="space-y-3">
           {DELIVERY_CHECK_ITEMS.map((key) => {
             const label = DELIVERY_CHECK_ITEM_LABELS[key as DeliveryCheckItemKey];
@@ -335,7 +335,7 @@ export function DeliveryForm({ mode, handoverId, initialData }: DeliveryFormProp
         />
       </Section>
 
-      <Section title="Customer Signature" defaultOpen={true}>
+      <Section title="Customer Signature" defaultOpen={false}>
         <p className="text-sm text-muted-foreground mb-2">
           Customer to sign below to confirm collection of the vehicle.
         </p>
