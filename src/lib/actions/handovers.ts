@@ -66,9 +66,64 @@ interface HandoverInput {
   photos?: PhotoInput[];
 }
 
+const VALID_STATUSES = ["draft", "completed"] as const;
+const VALID_TYPES = ["collection", "delivery"] as const;
+const VALID_CATEGORIES = [
+  "exterior", "interior", "damage", "tyres", "other", "v5", "signature",
+] as const;
+const VALID_TYRE_POSITIONS = ["NSF", "NSR", "OSR", "OSF"] as const;
+const MAX_STRING = 255;
+const MAX_COMMENTS = 2000;
+
+function validateHandoverInput(input: HandoverInput) {
+  if (!input.make || input.make.length > MAX_STRING)
+    throw new Error("Invalid make");
+  if (!input.model || input.model.length > MAX_STRING)
+    throw new Error("Invalid model");
+  if (!input.registration || input.registration.length > 20)
+    throw new Error("Invalid registration");
+  if (!input.name || input.name.length > MAX_STRING)
+    throw new Error("Invalid name");
+  if (!input.date || isNaN(new Date(input.date).getTime()))
+    throw new Error("Invalid date");
+  if (!VALID_STATUSES.includes(input.status as (typeof VALID_STATUSES)[number]))
+    throw new Error("Invalid status");
+  if (input.type && !VALID_TYPES.includes(input.type as (typeof VALID_TYPES)[number]))
+    throw new Error("Invalid type");
+  if (input.otherComments && input.otherComments.length > MAX_COMMENTS)
+    throw new Error("Comments too long");
+  if (input.mileage !== null && (typeof input.mileage !== "number" || input.mileage < 0))
+    throw new Error("Invalid mileage");
+
+  for (const t of input.tyres) {
+    if (!VALID_TYRE_POSITIONS.includes(t.position))
+      throw new Error("Invalid tyre position");
+    if (t.size && t.size.length > 50) throw new Error("Invalid tyre size");
+    if (t.depth && t.depth.length > 50) throw new Error("Invalid tyre depth");
+    if (t.brand && t.brand.length > MAX_STRING) throw new Error("Invalid tyre brand");
+  }
+
+  if (input.photos) {
+    for (const p of input.photos) {
+      if (p.category && !VALID_CATEGORIES.includes(p.category as (typeof VALID_CATEGORIES)[number]))
+        throw new Error("Invalid photo category");
+      if (p.caption && p.caption.length > 500) throw new Error("Caption too long");
+    }
+  }
+
+  for (const c of input.checks) {
+    if (!c.checkItem || c.checkItem.length > MAX_STRING)
+      throw new Error("Invalid check item");
+    if (c.comments && c.comments.length > MAX_COMMENTS)
+      throw new Error("Check comments too long");
+  }
+}
+
 export async function createHandover(input: HandoverInput) {
   const session = await getServerSession(authOptions);
   if (!session?.user) throw new Error("Unauthorized");
+
+  validateHandoverInput(input);
 
   const [vehicle] = await db
     .insert(vehicles)
@@ -150,6 +205,8 @@ export async function updateHandover(
   if (session.user.role !== "admin" && !session.user.canEdit) {
     throw new Error("Forbidden: no edit permission");
   }
+
+  validateHandoverInput(input);
 
   const [existing] = await db
     .select()
@@ -397,6 +454,17 @@ export async function linkPhotosToHandover(
 ) {
   const session = await getServerSession(authOptions);
   if (!session?.user) throw new Error("Unauthorized");
+
+  const [handover] = await db
+    .select({ userId: handovers.userId })
+    .from(handovers)
+    .where(eq(handovers.id, handoverId))
+    .limit(1);
+
+  if (!handover) throw new Error("Handover not found");
+  if (handover.userId !== session.user.id && session.user.role !== "admin") {
+    throw new Error("Forbidden");
+  }
 
   if (photoIds.length > 0) {
     for (const photoId of photoIds) {

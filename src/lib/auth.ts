@@ -24,13 +24,13 @@ export const authOptions: NextAuthOptions = {
             .limit(1);
 
           if (!user) {
-            console.log("[Auth] No user found for:", credentials.email);
+            console.log("[Auth] Login failed");
             return null;
           }
 
           const valid = await compare(credentials.password, user.passwordHash);
           if (!valid) {
-            console.log("[Auth] Invalid password for:", credentials.email);
+            console.log("[Auth] Login failed");
             return null;
           }
 

@@ -11,6 +11,17 @@ function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -28,6 +39,13 @@ export async function POST(
     if (!to || typeof to !== "string") {
       return NextResponse.json(
         { error: "Recipient email is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!EMAIL_REGEX.test(to) || to.length > 254) {
+      return NextResponse.json(
+        { error: "Invalid email address" },
         { status: 400 }
       );
     }
@@ -52,6 +70,9 @@ export async function POST(
 
     const { buffer, filename } = await generateHandoverPdf(id);
 
+    const safeName = escapeHtml(session.user.name || "");
+    const safeEmail = escapeHtml(session.user.email || "");
+
     const { error } = await getResend().emails.send({
       from: "Vehicle Handover <noreply@contact.frozyn.org>",
       to: [to],
@@ -59,7 +80,7 @@ export async function POST(
       html: `
         <h2>Vehicle Handover Report</h2>
         <p>Please find the attached vehicle handover report.</p>
-        <p>Sent by ${session.user.name} (${session.user.email})</p>
+        <p>Sent by ${safeName} (${safeEmail})</p>
       `,
       attachments: [
         {

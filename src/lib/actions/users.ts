@@ -30,6 +30,8 @@ export async function listUsers() {
     .orderBy(users.createdAt);
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export async function createUser(input: {
   email: string;
   name: string;
@@ -40,6 +42,14 @@ export async function createUser(input: {
   if (!session?.user || session.user.role !== "admin") {
     throw new Error("Forbidden");
   }
+
+  if (!input.name || input.name.length > 255) throw new Error("Invalid name");
+  if (!input.email || !EMAIL_REGEX.test(input.email) || input.email.length > 254)
+    throw new Error("Invalid email");
+  if (!input.password || input.password.length < 8 || input.password.length > 128)
+    throw new Error("Password must be 8-128 characters");
+  if (!["admin", "user"].includes(input.role))
+    throw new Error("Invalid role");
 
   const existing = await db
     .select()
@@ -89,22 +99,28 @@ export async function updateUser(
     throw new Error("Forbidden");
   }
 
-  if (input.name) {
+  if (input.name !== undefined) {
+    if (!input.name || input.name.length > 255) throw new Error("Invalid name");
     await db.update(users).set({ name: input.name }).where(eq(users.id, userId));
   }
 
-  if (input.email) {
+  if (input.email !== undefined) {
+    if (!input.email || !EMAIL_REGEX.test(input.email) || input.email.length > 254)
+      throw new Error("Invalid email");
     await db
       .update(users)
       .set({ email: input.email.toLowerCase() })
       .where(eq(users.id, userId));
   }
 
-  if (input.role) {
+  if (input.role !== undefined) {
+    if (!["admin", "user"].includes(input.role)) throw new Error("Invalid role");
     await db.update(users).set({ role: input.role }).where(eq(users.id, userId));
   }
 
-  if (input.password) {
+  if (input.password !== undefined) {
+    if (input.password.length < 8 || input.password.length > 128)
+      throw new Error("Password must be 8-128 characters");
     const passwordHash = await hash(input.password, 12);
     await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
   }
