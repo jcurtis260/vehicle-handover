@@ -15,6 +15,8 @@ import {
   Pencil,
   X,
   Check,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 
 interface UserItem {
@@ -35,6 +37,7 @@ export function SettingsClient({
   initialUsers: UserItem[];
 }) {
   const [users, setUsers] = useState(initialUsers);
+  const [usersSectionOpen, setUsersSectionOpen] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -247,230 +250,245 @@ export function SettingsClient({
       )}
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Users ({users.length})</CardTitle>
+        <CardHeader className="pb-3">
+          <button
+            type="button"
+            onClick={() => setUsersSectionOpen((prev) => !prev)}
+            className="w-full flex items-center justify-between text-left"
+            aria-expanded={usersSectionOpen}
+            aria-controls="settings-users-section"
+          >
+            <CardTitle className="text-lg">Users ({users.length})</CardTitle>
+            {usersSectionOpen ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
+          </button>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {users.map((user) => (
-              <div
-                key={user.id}
-                className="rounded-lg border border-border overflow-hidden"
-              >
-                {editingId === user.id ? (
-                  // Edit mode
-                  <div className="p-4 space-y-4 bg-muted/30">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-semibold text-sm">Edit User</h4>
-                      <button
-                        onClick={cancelEdit}
-                        className="text-muted-foreground hover:text-foreground"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    {editError && (
-                      <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-                        {editError}
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-muted-foreground">
-                          Name
-                        </label>
-                        <Input
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-muted-foreground">
-                          Email
-                        </label>
-                        <Input
-                          type="email"
-                          value={editEmail}
-                          onChange={(e) => setEditEmail(e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-muted-foreground">
-                          New Password (leave blank to keep current)
-                        </label>
-                        <Input
-                          type="password"
-                          value={editPassword}
-                          onChange={(e) => setEditPassword(e.target.value)}
-                          placeholder="Leave blank to keep current"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-muted-foreground">
-                          Role
-                        </label>
-                        <select
-                          value={editRole}
-                          onChange={(e) =>
-                            setEditRole(e.target.value as "admin" | "user")
-                          }
-                          className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground"
+        {usersSectionOpen && (
+          <CardContent id="settings-users-section">
+            <div className="space-y-3">
+              {users.map((user) => (
+                <div
+                  key={user.id}
+                  className="rounded-lg border border-border overflow-hidden"
+                >
+                  {editingId === user.id ? (
+                    // Edit mode
+                    <div className="p-4 space-y-4 bg-muted/30">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold text-sm">Edit User</h4>
+                        <button
+                          onClick={cancelEdit}
+                          className="text-muted-foreground hover:text-foreground"
                         >
-                          <option value="user">User</option>
-                          <option value="admin">Admin</option>
-                        </select>
+                          <X className="h-4 w-4" />
+                        </button>
                       </div>
-                    </div>
 
-                    {editRole !== "admin" && (
-                      <div className="rounded-lg border border-border p-3 space-y-3">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                          Permissions
-                        </p>
-                        <div className="flex flex-col sm:flex-row gap-4">
-                          <label className="flex items-center gap-2 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={editCanEdit}
-                              onChange={(e) => setEditCanEdit(e.target.checked)}
-                              className="h-4 w-4 rounded border-border text-primary accent-primary"
-                            />
-                            <span className="text-sm">Can edit reports</span>
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={editCanDelete}
-                              onChange={(e) => setEditCanDelete(e.target.checked)}
-                              className="h-4 w-4 rounded border-border text-primary accent-primary"
-                            />
-                            <span className="text-sm">Can delete reports</span>
-                          </label>
+                      {editError && (
+                        <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
+                          {editError}
                         </div>
-                        <div>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={editCanViewChangelog}
-                              onChange={(e) => setEditCanViewChangelog(e.target.checked)}
-                              className="rounded"
-                            />
-                            <span className="text-sm">Can view changelog</span>
-                          </label>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Admins always have full access. These only apply to standard users.
-                        </p>
-                      </div>
-                    )}
+                      )}
 
-                    <div className="flex gap-2 justify-end">
-                      <Button variant="outline" size="sm" onClick={cancelEdit}>
-                        Cancel
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => handleSaveEdit(user.id)}
-                        disabled={isPending}
-                      >
-                        {isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        ) : (
-                          <Check className="h-4 w-4 mr-2" />
-                        )}
-                        Save Changes
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  // View mode
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary shrink-0">
-                        {user.role === "admin" ? (
-                          <Shield className="h-4 w-4" />
-                        ) : (
-                          <User className="h-4 w-4" />
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium truncate">{user.name}</p>
-                          <Badge
-                            variant={
-                              user.role === "admin" ? "default" : "secondary"
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-muted-foreground">
+                            Name
+                          </label>
+                          <Input
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-muted-foreground">
+                            Email
+                          </label>
+                          <Input
+                            type="email"
+                            value={editEmail}
+                            onChange={(e) => setEditEmail(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-muted-foreground">
+                            New Password (leave blank to keep current)
+                          </label>
+                          <Input
+                            type="password"
+                            value={editPassword}
+                            onChange={(e) => setEditPassword(e.target.value)}
+                            placeholder="Leave blank to keep current"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-muted-foreground">
+                            Role
+                          </label>
+                          <select
+                            value={editRole}
+                            onChange={(e) =>
+                              setEditRole(e.target.value as "admin" | "user")
                             }
+                            className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground"
                           >
-                            {user.role}
-                          </Badge>
+                            <option value="user">User</option>
+                            <option value="admin">Admin</option>
+                          </select>
                         </div>
-                        <p className="text-sm text-muted-foreground truncate">
-                          {user.email}
-                        </p>
-                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          {user.role !== "admin" && (user.canEdit || user.canDelete) && (
-                            <>
-                              {user.canEdit && (
-                                <span className="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400">
-                                  Can Edit
-                                </span>
-                              )}
-                              {user.canDelete && (
-                                <span className="inline-flex items-center rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400">
-                                  Can Delete
-                                </span>
-                              )}
-                              {user.canViewChangelog && (
-                                <span className="inline-flex items-center rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-medium text-purple-600 dark:text-purple-400">
-                                  Changelog
-                                </span>
-                              )}
-                            </>
+                      </div>
+
+                      {editRole !== "admin" && (
+                        <div className="rounded-lg border border-border p-3 space-y-3">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Permissions
+                          </p>
+                          <div className="flex flex-col sm:flex-row gap-4">
+                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={editCanEdit}
+                                onChange={(e) => setEditCanEdit(e.target.checked)}
+                                className="h-4 w-4 rounded border-border text-primary accent-primary"
+                              />
+                              <span className="text-sm">Can edit reports</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={editCanDelete}
+                                onChange={(e) => setEditCanDelete(e.target.checked)}
+                                className="h-4 w-4 rounded border-border text-primary accent-primary"
+                              />
+                              <span className="text-sm">Can delete reports</span>
+                            </label>
+                          </div>
+                          <div>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={editCanViewChangelog}
+                                onChange={(e) => setEditCanViewChangelog(e.target.checked)}
+                                className="rounded"
+                              />
+                              <span className="text-sm">Can view changelog</span>
+                            </label>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Admins always have full access. These only apply to standard users.
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="flex gap-2 justify-end">
+                        <Button variant="outline" size="sm" onClick={cancelEdit}>
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleSaveEdit(user.id)}
+                          disabled={isPending}
+                        >
+                          {isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <Check className="h-4 w-4 mr-2" />
+                          )}
+                          Save Changes
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    // View mode
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary shrink-0">
+                          {user.role === "admin" ? (
+                            <Shield className="h-4 w-4" />
+                          ) : (
+                            <User className="h-4 w-4" />
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Last login:{" "}
-                          {user.lastLoginAt
-                            ? new Date(user.lastLoginAt).toLocaleString("en-GB", {
-                                day: "2-digit",
-                                month: "short",
-                                year: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })
-                            : "Never"}
-                        </p>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium truncate">{user.name}</p>
+                            <Badge
+                              variant={
+                                user.role === "admin" ? "default" : "secondary"
+                              }
+                            >
+                              {user.role}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground truncate">
+                            {user.email}
+                          </p>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            {user.role !== "admin" && (user.canEdit || user.canDelete) && (
+                              <>
+                                {user.canEdit && (
+                                  <span className="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400">
+                                    Can Edit
+                                  </span>
+                                )}
+                                {user.canDelete && (
+                                  <span className="inline-flex items-center rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400">
+                                    Can Delete
+                                  </span>
+                                )}
+                                {user.canViewChangelog && (
+                                  <span className="inline-flex items-center rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-medium text-purple-600 dark:text-purple-400">
+                                    Changelog
+                                  </span>
+                                )}
+                              </>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Last login:{" "}
+                            {user.lastLoginAt
+                              ? new Date(user.lastLoginAt).toLocaleString("en-GB", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                              : "Never"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 ml-12 sm:ml-0">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => startEdit(user)}
+                          className="h-8"
+                        >
+                          <Pencil className="h-3 w-3 mr-1" />
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDelete(user.id, user.name)}
+                          className="h-8 text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-3 w-3 mr-1" />
+                          Delete
+                        </Button>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2 ml-12 sm:ml-0">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => startEdit(user)}
-                        className="h-8"
-                      >
-                        <Pencil className="h-3 w-3 mr-1" />
-                        Edit
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDelete(user.id, user.name)}
-                        className="h-8 text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-3 w-3 mr-1" />
-                        Delete
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </CardContent>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        )}
       </Card>
     </div>
   );
