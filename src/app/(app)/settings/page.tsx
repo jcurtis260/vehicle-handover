@@ -1,14 +1,10 @@
 import { requireAdmin } from "@/lib/auth-helpers";
 import { listUsers } from "@/lib/actions/users";
-import {
-  backfillVehicleCatalogFromVehicles,
-  getVehicleCatalog,
-} from "@/lib/actions/vehicle-catalog";
+import { getVehicleCatalog } from "@/lib/actions/vehicle-catalog";
 import { SettingsClient } from "./settings-client";
 
 export default async function SettingsPage() {
   await requireAdmin();
-  await backfillVehicleCatalogFromVehicles();
   const [users, vehicleCatalog] = await Promise.all([
     listUsers(),
     getVehicleCatalog(),
