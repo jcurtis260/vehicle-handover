@@ -34,11 +34,15 @@ export const authOptions: NextAuthOptions = {
             return null;
           }
 
-          db.update(users)
-            .set({ lastLoginAt: new Date() })
-            .where(eq(users.id, user.id))
-            .then(() => {})
-            .catch((err) => console.error("[Auth] Failed to update lastLoginAt:", err));
+          try {
+            await db
+              .update(users)
+              .set({ lastLoginAt: new Date() })
+              .where(eq(users.id, user.id));
+          } catch (err) {
+            // Don't block sign-in if activity tracking write fails.
+            console.error("[Auth] Failed to update lastLoginAt:", err);
+          }
 
           return {
             id: user.id,

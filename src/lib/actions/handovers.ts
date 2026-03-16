@@ -30,6 +30,7 @@ import {
 import { ensureCatalogMakeModel } from "@/lib/actions/vehicle-catalog";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { touchUserLastLogin } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
 
 interface CheckInput {
@@ -142,9 +143,15 @@ function canEditAllReports(session: ReportPermissionUser) {
   return session.role === "admin" || session.canEditAllReports === true;
 }
 
-export async function createHandover(input: HandoverInput) {
+async function requireActionSession() {
   const session = await getServerSession(authOptions);
   if (!session?.user) throw new Error("Unauthorized");
+  await touchUserLastLogin(session.user.id);
+  return session;
+}
+
+export async function createHandover(input: HandoverInput) {
+  const session = await requireActionSession();
 
   validateHandoverInput(input);
   const normalizedMake = normalizeVehicleLabel(input.make);
@@ -227,8 +234,7 @@ export async function updateHandover(
   handoverId: string,
   input: HandoverInput
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) throw new Error("Unauthorized");
+  const session = await requireActionSession();
   if (
     session.user.role !== "admin" &&
     !session.user.canEdit &&
@@ -339,8 +345,7 @@ export async function updateHandover(
 }
 
 export async function getHandover(handoverId: string) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) throw new Error("Unauthorized");
+  const session = await requireActionSession();
 
   const result = await db.query.handovers.findFirst({
     where: eq(handovers.id, handoverId),
@@ -362,8 +367,7 @@ export async function getHandover(handoverId: string) {
 }
 
 export async function listHandovers(limit = 20, offset = 0) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) throw new Error("Unauthorized");
+  const session = await requireActionSession();
 
   const canSeeAll = canViewAllReports(session.user);
   const conditions = canSeeAll ? undefined : eq(handovers.userId, session.user.id);
@@ -380,8 +384,7 @@ export async function listHandovers(limit = 20, offset = 0) {
 }
 
 export async function getHandoverStats() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) throw new Error("Unauthorized");
+  const session = await requireActionSession();
 
   const canSeeAll = canViewAllReports(session.user);
   const userFilter = canSeeAll ? sql`1=1` : eq(handovers.userId, session.user.id);
@@ -409,8 +412,7 @@ export async function getHandoverStats() {
 }
 
 export async function searchHandovers(query: string) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) throw new Error("Unauthorized");
+  const session = await requireActionSession();
 
   const canSeeAll = canViewAllReports(session.user);
   const searchPattern = `%${query}%`;
@@ -447,8 +449,7 @@ export async function searchHandovers(query: string) {
 }
 
 export async function deleteHandover(handoverId: string) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) throw new Error("Unauthorized");
+  const session = await requireActionSession();
   if (session.user.role !== "admin" && !session.user.canDelete) {
     throw new Error("Forbidden");
   }
@@ -490,8 +491,7 @@ export async function linkPhotosToHandover(
   handoverId: string,
   photoIds: string[]
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) throw new Error("Unauthorized");
+  const session = await requireActionSession();
 
   const [handover] = await db
     .select({ userId: handovers.userId })
@@ -517,8 +517,7 @@ export async function linkPhotosToHandover(
 }
 
 export async function getDashboardAnalytics() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) throw new Error("Unauthorized");
+  const session = await requireActionSession();
 
   const isAdmin = session.user.role === "admin";
   const canSeeAll = canViewAllReports(session.user);
@@ -747,8 +746,7 @@ export async function getDashboardAnalytics() {
 }
 
 export async function getHandoverFilterOptions() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) throw new Error("Unauthorized");
+  const session = await requireActionSession();
 
   const isAdmin = session.user.role === "admin";
   const canSeeAll = canViewAllReports(session.user);
@@ -804,8 +802,7 @@ export async function listFilteredHandovers(
   page = 1,
   pageSize = 20
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) throw new Error("Unauthorized");
+  const session = await requireActionSession();
 
   const isAdmin = session.user.role === "admin";
   const canSeeAll = canViewAllReports(session.user);

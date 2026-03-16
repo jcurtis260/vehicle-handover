@@ -37,7 +37,7 @@ export default async function HandoverReviewPage({
   const isOwner = handover.userId === session?.user?.id;
   const canEditThisReport =
     canEditAllReports || (isOwner && (handover.status === "draft" || canEdit));
-  const canDeleteThisReport = canDelete && isOwner;
+  const canDeleteThisReport = isAdmin || (canDelete && isOwner);
 
   const isDelivery = handover.type === "delivery";
 
