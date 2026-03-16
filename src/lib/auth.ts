@@ -48,6 +48,8 @@ export const authOptions: NextAuthOptions = {
             canEdit: user.canEdit,
             canDelete: user.canDelete,
             canViewChangelog: user.canViewChangelog,
+            canViewAllReports: user.canViewAllReports,
+            canEditAllReports: user.canEditAllReports,
           };
         } catch (error) {
           console.error("[Auth] Error during authorization:", error);
@@ -60,11 +62,20 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
-        const u = user as unknown as { role: string; canEdit: boolean; canDelete: boolean; canViewChangelog: boolean };
+        const u = user as unknown as {
+          role: string;
+          canEdit: boolean;
+          canDelete: boolean;
+          canViewChangelog: boolean;
+          canViewAllReports: boolean;
+          canEditAllReports: boolean;
+        };
         token.role = u.role;
         token.canEdit = u.canEdit;
         token.canDelete = u.canDelete;
         token.canViewChangelog = u.canViewChangelog;
+        token.canViewAllReports = u.canViewAllReports;
+        token.canEditAllReports = u.canEditAllReports;
       }
       return token;
     },
@@ -75,6 +86,8 @@ export const authOptions: NextAuthOptions = {
         session.user.canEdit = token.canEdit as boolean;
         session.user.canDelete = token.canDelete as boolean;
         session.user.canViewChangelog = token.canViewChangelog as boolean;
+        session.user.canViewAllReports = token.canViewAllReports as boolean;
+        session.user.canEditAllReports = token.canEditAllReports as boolean;
       }
       return session;
     },

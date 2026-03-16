@@ -10,6 +10,8 @@ declare module "next-auth" {
       canEdit: boolean;
       canDelete: boolean;
       canViewChangelog: boolean;
+      canViewAllReports: boolean;
+      canEditAllReports: boolean;
     };
   }
 }
@@ -21,5 +23,7 @@ declare module "next-auth/jwt" {
     canEdit: boolean;
     canDelete: boolean;
     canViewChangelog: boolean;
+    canViewAllReports: boolean;
+    canEditAllReports: boolean;
   }
 }

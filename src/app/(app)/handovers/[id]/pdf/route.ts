@@ -30,7 +30,9 @@ export async function GET(
 
     if (
       handover.userId !== session.user.id &&
-      session.user.role !== "admin"
+      session.user.role !== "admin" &&
+      !session.user.canViewAllReports &&
+      !session.user.canEditAllReports
     ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }

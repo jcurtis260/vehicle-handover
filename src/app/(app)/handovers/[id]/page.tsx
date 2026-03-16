@@ -29,10 +29,15 @@ export default async function HandoverReviewPage({
   const session = await getServerSession(authOptions);
   const isAdmin = session?.user?.role === "admin";
   const canEdit = isAdmin || session?.user?.canEdit === true;
+  const canEditAllReports = isAdmin || session?.user?.canEditAllReports === true;
   const canDelete = isAdmin || session?.user?.canDelete === true;
   const { id } = await params;
   const handover = await getHandover(id);
   if (!handover) notFound();
+  const isOwner = handover.userId === session?.user?.id;
+  const canEditThisReport =
+    canEditAllReports || (isOwner && (handover.status === "draft" || canEdit));
+  const canDeleteThisReport = canDelete && isOwner;
 
   const isDelivery = handover.type === "delivery";
 
@@ -86,7 +91,7 @@ export default async function HandoverReviewPage({
           </Button>
         </a>
         <EmailModal handoverId={id} />
-        {(handover.status === "draft" || canEdit) && (
+        {canEditThisReport && (
           <Link href={`/handovers/${id}/edit`}>
             <Button variant="outline" className="min-h-[44px]">
               <Pencil className="h-4 w-4 mr-2" />
@@ -94,7 +99,7 @@ export default async function HandoverReviewPage({
             </Button>
           </Link>
         )}
-        {canDelete && <DeleteHandoverButton handoverId={id} />}
+        {canDeleteThisReport && <DeleteHandoverButton handoverId={id} />}
       </div>
 
       <Card>

@@ -20,9 +20,16 @@ export default async function EditHandoverPage({
   if (!handover) notFound();
 
   const isAdmin = session?.user?.role === "admin";
+  const canEditAllReports = isAdmin || session?.user?.canEditAllReports === true;
   const canEdit = isAdmin || session?.user?.canEdit === true;
+  const isOwner = handover.userId === session?.user?.id;
+  const canEditThisReport = canEditAllReports || (isOwner && canEdit);
 
-  if (handover.status === "completed" && !canEdit) {
+  if (!canEditThisReport) {
+    redirect(`/handovers/${id}`);
+  }
+
+  if (handover.status === "completed" && !canEdit && !canEditAllReports) {
     redirect(`/handovers/${id}`);
   }
 

@@ -83,7 +83,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Handover not found" }, { status: 404 });
       }
 
-      if (handover.userId !== session.user.id && session.user.role !== "admin") {
+      if (
+        handover.userId !== session.user.id &&
+        session.user.role !== "admin" &&
+        !session.user.canEditAllReports
+      ) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
 

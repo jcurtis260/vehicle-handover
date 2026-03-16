@@ -23,6 +23,8 @@ export async function listUsers() {
       canEdit: users.canEdit,
       canDelete: users.canDelete,
       canViewChangelog: users.canViewChangelog,
+      canViewAllReports: users.canViewAllReports,
+      canEditAllReports: users.canEditAllReports,
       lastLoginAt: users.lastLoginAt,
       createdAt: users.createdAt,
     })
@@ -92,12 +94,25 @@ export async function updateUser(
     canEdit?: boolean;
     canDelete?: boolean;
     canViewChangelog?: boolean;
+    canViewAllReports?: boolean;
+    canEditAllReports?: boolean;
   }
 ) {
   const session = await getServerSession(authOptions);
   if (!session?.user || session.user.role !== "admin") {
     throw new Error("Forbidden");
   }
+
+  const [currentUser] = await db
+    .select({
+      canViewAllReports: users.canViewAllReports,
+      canEditAllReports: users.canEditAllReports,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!currentUser) throw new Error("User not found");
 
   if (input.name !== undefined) {
     if (!input.name || input.name.length > 255) throw new Error("Invalid name");
@@ -135,6 +150,31 @@ export async function updateUser(
 
   if (input.canViewChangelog !== undefined) {
     await db.update(users).set({ canViewChangelog: input.canViewChangelog }).where(eq(users.id, userId));
+  }
+
+  if (
+    input.canViewAllReports !== undefined ||
+    input.canEditAllReports !== undefined
+  ) {
+    let nextCanViewAllReports =
+      input.canViewAllReports ?? currentUser.canViewAllReports;
+    let nextCanEditAllReports =
+      input.canEditAllReports ?? currentUser.canEditAllReports;
+
+    // Mutually exclusive: either "view all (edit own)" OR "view+edit all".
+    if (nextCanEditAllReports) {
+      nextCanViewAllReports = false;
+    } else if (nextCanViewAllReports) {
+      nextCanEditAllReports = false;
+    }
+
+    await db
+      .update(users)
+      .set({
+        canViewAllReports: nextCanViewAllReports,
+        canEditAllReports: nextCanEditAllReports,
+      })
+      .where(eq(users.id, userId));
   }
 
   revalidatePath("/settings");

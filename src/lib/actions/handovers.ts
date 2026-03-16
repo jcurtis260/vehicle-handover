@@ -119,6 +119,24 @@ function validateHandoverInput(input: HandoverInput) {
   }
 }
 
+type ReportPermissionUser = {
+  role: string;
+  canViewAllReports?: boolean;
+  canEditAllReports?: boolean;
+};
+
+function canViewAllReports(session: ReportPermissionUser) {
+  return (
+    session.role === "admin" ||
+    session.canViewAllReports === true ||
+    session.canEditAllReports === true
+  );
+}
+
+function canEditAllReports(session: ReportPermissionUser) {
+  return session.role === "admin" || session.canEditAllReports === true;
+}
+
 export async function createHandover(input: HandoverInput) {
   const session = await getServerSession(authOptions);
   if (!session?.user) throw new Error("Unauthorized");
@@ -202,7 +220,11 @@ export async function updateHandover(
 ) {
   const session = await getServerSession(authOptions);
   if (!session?.user) throw new Error("Unauthorized");
-  if (session.user.role !== "admin" && !session.user.canEdit) {
+  if (
+    session.user.role !== "admin" &&
+    !session.user.canEdit &&
+    !session.user.canEditAllReports
+  ) {
     throw new Error("Forbidden: no edit permission");
   }
 
@@ -215,7 +237,10 @@ export async function updateHandover(
     .limit(1);
 
   if (!existing) throw new Error("Not found");
-  if (existing.userId !== session.user.id && session.user.role !== "admin") {
+  if (
+    existing.userId !== session.user.id &&
+    !canEditAllReports(session.user)
+  ) {
     throw new Error("Forbidden");
   }
 
@@ -316,7 +341,7 @@ export async function getHandover(handoverId: string) {
   });
 
   if (!result) return null;
-  if (result.userId !== session.user.id && session.user.role !== "admin") {
+  if (result.userId !== session.user.id && !canViewAllReports(session.user)) {
     return null;
   }
 
@@ -327,8 +352,8 @@ export async function listHandovers(limit = 20, offset = 0) {
   const session = await getServerSession(authOptions);
   if (!session?.user) throw new Error("Unauthorized");
 
-  const isAdmin = session.user.role === "admin";
-  const conditions = isAdmin ? undefined : eq(handovers.userId, session.user.id);
+  const canSeeAll = canViewAllReports(session.user);
+  const conditions = canSeeAll ? undefined : eq(handovers.userId, session.user.id);
 
   const results = await db.query.handovers.findMany({
     where: conditions,
@@ -345,8 +370,8 @@ export async function getHandoverStats() {
   const session = await getServerSession(authOptions);
   if (!session?.user) throw new Error("Unauthorized");
 
-  const isAdmin = session.user.role === "admin";
-  const userFilter = isAdmin ? sql`1=1` : eq(handovers.userId, session.user.id);
+  const canSeeAll = canViewAllReports(session.user);
+  const userFilter = canSeeAll ? sql`1=1` : eq(handovers.userId, session.user.id);
 
   const [totalResult] = await db
     .select({ value: count() })
@@ -374,7 +399,7 @@ export async function searchHandovers(query: string) {
   const session = await getServerSession(authOptions);
   if (!session?.user) throw new Error("Unauthorized");
 
-  const isAdmin = session.user.role === "admin";
+  const canSeeAll = canViewAllReports(session.user);
   const searchPattern = `%${query}%`;
 
   const searchConditions = or(
@@ -383,7 +408,7 @@ export async function searchHandovers(query: string) {
     ilike(vehicles.registration, searchPattern)
   );
 
-  const userFilter = isAdmin
+  const userFilter = canSeeAll
     ? searchConditions
     : and(eq(handovers.userId, session.user.id), searchConditions);
 
@@ -462,7 +487,7 @@ export async function linkPhotosToHandover(
     .limit(1);
 
   if (!handover) throw new Error("Handover not found");
-  if (handover.userId !== session.user.id && session.user.role !== "admin") {
+  if (handover.userId !== session.user.id && !canEditAllReports(session.user)) {
     throw new Error("Forbidden");
   }
 
@@ -483,7 +508,8 @@ export async function getDashboardAnalytics() {
   if (!session?.user) throw new Error("Unauthorized");
 
   const isAdmin = session.user.role === "admin";
-  const userFilter = isAdmin ? sql`1=1` : eq(handovers.userId, session.user.id);
+  const canSeeAll = canViewAllReports(session.user);
+  const userFilter = canSeeAll ? sql`1=1` : eq(handovers.userId, session.user.id);
 
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -712,7 +738,8 @@ export async function getHandoverFilterOptions() {
   if (!session?.user) throw new Error("Unauthorized");
 
   const isAdmin = session.user.role === "admin";
-  const userFilter = isAdmin ? sql`1=1` : eq(handovers.userId, session.user.id);
+  const canSeeAll = canViewAllReports(session.user);
+  const userFilter = canSeeAll ? sql`1=1` : eq(handovers.userId, session.user.id);
 
   const [makesResult, modelsResult, inspectorsResult] = await Promise.all([
     db
@@ -729,7 +756,7 @@ export async function getHandoverFilterOptions() {
       .where(userFilter)
       .orderBy(asc(vehicles.model)),
 
-    isAdmin
+    isAdmin || canSeeAll
       ? db
           .selectDistinct({ id: users.id, name: users.name })
           .from(users)
@@ -742,7 +769,7 @@ export async function getHandoverFilterOptions() {
     makes: makesResult.map((r) => r.make),
     models: modelsResult.map((r) => r.model),
     inspectors: inspectorsResult.map((r) => ({ id: r.id, name: r.name })),
-    isAdmin,
+    isAdmin: isAdmin || canSeeAll,
   };
 }
 
@@ -768,9 +795,10 @@ export async function listFilteredHandovers(
   if (!session?.user) throw new Error("Unauthorized");
 
   const isAdmin = session.user.role === "admin";
+  const canSeeAll = canViewAllReports(session.user);
   const conditions: ReturnType<typeof eq>[] = [];
 
-  if (!isAdmin) {
+  if (!canSeeAll) {
     conditions.push(eq(handovers.userId, session.user.id));
   }
 
@@ -801,7 +829,7 @@ export async function listFilteredHandovers(
     conditions.push(eq(handovers.type, filters.type));
   }
 
-  if (filters.inspectorId && isAdmin) {
+  if (filters.inspectorId && (isAdmin || canSeeAll)) {
     conditions.push(eq(handovers.userId, filters.inspectorId));
   }
 

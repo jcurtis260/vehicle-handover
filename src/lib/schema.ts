@@ -40,6 +40,8 @@ export const users = pgTable("users", {
   canEdit: boolean("can_edit").notNull().default(false),
   canDelete: boolean("can_delete").notNull().default(false),
   canViewChangelog: boolean("can_view_changelog").notNull().default(false),
+  canViewAllReports: boolean("can_view_all_reports").notNull().default(false),
+  canEditAllReports: boolean("can_edit_all_reports").notNull().default(false),
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

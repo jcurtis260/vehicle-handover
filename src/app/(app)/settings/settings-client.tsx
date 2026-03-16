@@ -27,6 +27,8 @@ interface UserItem {
   canEdit: boolean;
   canDelete: boolean;
   canViewChangelog: boolean;
+  canViewAllReports: boolean;
+  canEditAllReports: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;
 }
@@ -57,6 +59,8 @@ export function SettingsClient({
   const [editCanEdit, setEditCanEdit] = useState(false);
   const [editCanDelete, setEditCanDelete] = useState(false);
   const [editCanViewChangelog, setEditCanViewChangelog] = useState(false);
+  const [editCanViewAllReports, setEditCanViewAllReports] = useState(false);
+  const [editCanEditAllReports, setEditCanEditAllReports] = useState(false);
   const [editError, setEditError] = useState("");
 
   function handleAdd() {
@@ -71,7 +75,7 @@ export function SettingsClient({
           password: addPassword,
           role: addRole,
         });
-        setUsers((prev) => [...prev, { ...user, canEdit: false, canDelete: false, canViewChangelog: false, lastLoginAt: null, createdAt: new Date() }]);
+        setUsers((prev) => [...prev, { ...user, canEdit: false, canDelete: false, canViewChangelog: false, canViewAllReports: false, canEditAllReports: false, lastLoginAt: null, createdAt: new Date() }]);
         setShowAdd(false);
         setAddName("");
         setAddEmail("");
@@ -94,6 +98,8 @@ export function SettingsClient({
     setEditCanEdit(user.canEdit);
     setEditCanDelete(user.canDelete);
     setEditCanViewChangelog(user.canViewChangelog);
+    setEditCanViewAllReports(user.canViewAllReports);
+    setEditCanEditAllReports(user.canEditAllReports);
     setEditError("");
   }
 
@@ -116,6 +122,8 @@ export function SettingsClient({
           canEdit?: boolean;
           canDelete?: boolean;
           canViewChangelog?: boolean;
+          canViewAllReports?: boolean;
+          canEditAllReports?: boolean;
         } = {};
 
         if (editName !== current?.name) updates.name = editName;
@@ -125,6 +133,8 @@ export function SettingsClient({
         if (editCanEdit !== current?.canEdit) updates.canEdit = editCanEdit;
         if (editCanDelete !== current?.canDelete) updates.canDelete = editCanDelete;
         if (editCanViewChangelog !== current?.canViewChangelog) updates.canViewChangelog = editCanViewChangelog;
+        if (editCanViewAllReports !== current?.canViewAllReports) updates.canViewAllReports = editCanViewAllReports;
+        if (editCanEditAllReports !== current?.canEditAllReports) updates.canEditAllReports = editCanEditAllReports;
 
         if (Object.keys(updates).length > 0) {
           await updateUser(userId, updates);
@@ -139,6 +149,8 @@ export function SettingsClient({
                     canEdit: editCanEdit,
                     canDelete: editCanDelete,
                     canViewChangelog: editCanViewChangelog,
+                    canViewAllReports: editCanViewAllReports,
+                    canEditAllReports: editCanEditAllReports,
                   }
                 : u
             )
@@ -377,6 +389,36 @@ export function SettingsClient({
                               <span className="text-sm">Can view changelog</span>
                             </label>
                           </div>
+                          <div>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={editCanViewAllReports}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  setEditCanViewAllReports(checked);
+                                  if (checked) setEditCanEditAllReports(false);
+                                }}
+                                className="rounded"
+                              />
+                              <span className="text-sm">Can view all reports (edit own only)</span>
+                            </label>
+                          </div>
+                          <div>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={editCanEditAllReports}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  setEditCanEditAllReports(checked);
+                                  if (checked) setEditCanViewAllReports(false);
+                                }}
+                                className="rounded"
+                              />
+                              <span className="text-sm">Can view and edit all reports</span>
+                            </label>
+                          </div>
                           <p className="text-xs text-muted-foreground">
                             Admins always have full access. These only apply to standard users.
                           </p>
@@ -427,7 +469,7 @@ export function SettingsClient({
                             {user.email}
                           </p>
                           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                            {user.role !== "admin" && (user.canEdit || user.canDelete) && (
+                            {user.role !== "admin" && (user.canEdit || user.canDelete || user.canViewAllReports || user.canEditAllReports) && (
                               <>
                                 {user.canEdit && (
                                   <span className="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400">
@@ -442,6 +484,16 @@ export function SettingsClient({
                                 {user.canViewChangelog && (
                                   <span className="inline-flex items-center rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-medium text-purple-600 dark:text-purple-400">
                                     Changelog
+                                  </span>
+                                )}
+                                {user.canViewAllReports && (
+                                  <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                                    View All Reports
+                                  </span>
+                                )}
+                                {user.canEditAllReports && (
+                                  <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                                    Edit All Reports
                                   </span>
                                 )}
                               </>
