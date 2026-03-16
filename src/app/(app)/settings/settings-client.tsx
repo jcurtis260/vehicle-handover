@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +53,9 @@ interface VehicleMakeItem {
   models: VehicleModelItem[];
 }
 
+type CatalogSortMode = "alpha" | "models_desc" | "models_asc";
+const CATALOG_PREFS_KEY = "settingsVehicleCatalogPrefsV1";
+
 export function SettingsClient({
   initialUsers,
   initialVehicleCatalog,
@@ -96,6 +99,95 @@ export function SettingsClient({
   const [editingMakeName, setEditingMakeName] = useState("");
   const [editingModelId, setEditingModelId] = useState<string | null>(null);
   const [editingModelName, setEditingModelName] = useState("");
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [catalogExactMakeId, setCatalogExactMakeId] = useState("");
+  const [catalogOnlyEmptyMakes, setCatalogOnlyEmptyMakes] = useState(false);
+  const [catalogSortMode, setCatalogSortMode] = useState<CatalogSortMode>("alpha");
+  const [openMakeIds, setOpenMakeIds] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CATALOG_PREFS_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        search?: string;
+        exactMakeId?: string;
+        onlyEmptyMakes?: boolean;
+        sortMode?: CatalogSortMode;
+        openMakeIds?: Record<string, boolean>;
+      };
+      if (typeof parsed.search === "string") setCatalogSearch(parsed.search);
+      if (typeof parsed.exactMakeId === "string")
+        setCatalogExactMakeId(parsed.exactMakeId);
+      if (typeof parsed.onlyEmptyMakes === "boolean")
+        setCatalogOnlyEmptyMakes(parsed.onlyEmptyMakes);
+      if (
+        parsed.sortMode === "alpha" ||
+        parsed.sortMode === "models_desc" ||
+        parsed.sortMode === "models_asc"
+      ) {
+        setCatalogSortMode(parsed.sortMode);
+      }
+      if (parsed.openMakeIds && typeof parsed.openMakeIds === "object") {
+        setOpenMakeIds(parsed.openMakeIds);
+      }
+    } catch {
+      // Ignore malformed localStorage payload.
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        CATALOG_PREFS_KEY,
+        JSON.stringify({
+          search: catalogSearch,
+          exactMakeId: catalogExactMakeId,
+          onlyEmptyMakes: catalogOnlyEmptyMakes,
+          sortMode: catalogSortMode,
+          openMakeIds,
+        })
+      );
+    } catch {
+      // Ignore localStorage write failures.
+    }
+  }, [
+    catalogSearch,
+    catalogExactMakeId,
+    catalogOnlyEmptyMakes,
+    catalogSortMode,
+    openMakeIds,
+  ]);
+
+  const filteredVehicleCatalog = useMemo(() => {
+    const search = catalogSearch.trim().toLowerCase();
+    const next = vehicleCatalog.filter((make) => {
+      const matchesExact = !catalogExactMakeId || make.id === catalogExactMakeId;
+      const matchesSearch = !search || make.name.toLowerCase().includes(search);
+      const matchesEmpty = !catalogOnlyEmptyMakes || make.models.length === 0;
+      return matchesExact && matchesSearch && matchesEmpty;
+    });
+
+    if (catalogSortMode === "models_desc") {
+      return next.sort(
+        (a, b) => b.models.length - a.models.length || a.name.localeCompare(b.name)
+      );
+    }
+
+    if (catalogSortMode === "models_asc") {
+      return next.sort(
+        (a, b) => a.models.length - b.models.length || a.name.localeCompare(b.name)
+      );
+    }
+
+    return next.sort((a, b) => a.name.localeCompare(b.name));
+  }, [
+    vehicleCatalog,
+    catalogSearch,
+    catalogExactMakeId,
+    catalogOnlyEmptyMakes,
+    catalogSortMode,
+  ]);
 
   function handleAdd() {
     if (!addName || !addEmail || !addPassword) return;
@@ -246,6 +338,12 @@ export function SettingsClient({
         await deleteVehicleMake(makeId);
         setVehicleCatalog((prev) => prev.filter((m) => m.id !== makeId));
         if (selectedMakeIdForModel === makeId) setSelectedMakeIdForModel("");
+        if (catalogExactMakeId === makeId) setCatalogExactMakeId("");
+        setOpenMakeIds((prev) => {
+          const next = { ...prev };
+          delete next[makeId];
+          return next;
+        });
       } catch (err) {
         setCatalogError(
           err instanceof Error ? err.message : "Failed to delete make"
@@ -257,6 +355,7 @@ export function SettingsClient({
   function handleStartEditMake(make: VehicleMakeItem) {
     setEditingMakeId(make.id);
     setEditingMakeName(make.name);
+    setOpenMakeIds((prev) => ({ ...prev, [make.id]: true }));
   }
 
   function handleSaveEditMake(makeId: string) {
@@ -332,6 +431,7 @@ export function SettingsClient({
   function handleStartEditModel(model: VehicleModelItem) {
     setEditingModelId(model.id);
     setEditingModelName(model.name);
+    setOpenMakeIds((prev) => ({ ...prev, [model.makeId]: true }));
   }
 
   function handleSaveEditModel(modelId: string) {
@@ -360,6 +460,36 @@ export function SettingsClient({
         );
       }
     });
+  }
+
+  function toggleMakeOpen(makeId: string) {
+    setOpenMakeIds((prev) => ({ ...prev, [makeId]: !prev[makeId] }));
+  }
+
+  function expandAllVisibleMakes() {
+    setOpenMakeIds((prev) => {
+      const next = { ...prev };
+      for (const make of filteredVehicleCatalog) {
+        next[make.id] = true;
+      }
+      return next;
+    });
+  }
+
+  function collapseAllVisibleMakes() {
+    setOpenMakeIds((prev) => {
+      const next = { ...prev };
+      for (const make of filteredVehicleCatalog) {
+        next[make.id] = false;
+      }
+      return next;
+    });
+  }
+
+  function clearCatalogFilters() {
+    setCatalogSearch("");
+    setCatalogExactMakeId("");
+    setCatalogOnlyEmptyMakes(false);
   }
 
   return (
@@ -748,6 +878,63 @@ export function SettingsClient({
               </div>
             )}
 
+            <div className="rounded-lg border border-border p-3 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_220px_auto] gap-2">
+                <Input
+                  value={catalogSearch}
+                  onChange={(e) => setCatalogSearch(e.target.value)}
+                  placeholder="Search brand (e.g. Mercedes)"
+                />
+                <select
+                  value={catalogExactMakeId}
+                  onChange={(e) => setCatalogExactMakeId(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="">All brands</option>
+                  {vehicleCatalog
+                    .slice()
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((make) => (
+                      <option key={make.id} value={make.id}>
+                        {make.name}
+                      </option>
+                    ))}
+                </select>
+                <Button variant="outline" onClick={clearCatalogFilters}>
+                  Clear
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-[auto_220px_auto_auto] gap-2">
+                <label className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={catalogOnlyEmptyMakes}
+                    onChange={(e) => setCatalogOnlyEmptyMakes(e.target.checked)}
+                    className="rounded"
+                  />
+                  Only brands with 0 models
+                </label>
+                <select
+                  value={catalogSortMode}
+                  onChange={(e) => setCatalogSortMode(e.target.value as CatalogSortMode)}
+                  className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="alpha">Sort: A-Z</option>
+                  <option value="models_desc">Sort: Model count (high-low)</option>
+                  <option value="models_asc">Sort: Model count (low-high)</option>
+                </select>
+                <Button variant="outline" onClick={expandAllVisibleMakes}>
+                  Expand Visible
+                </Button>
+                <Button variant="outline" onClick={collapseAllVisibleMakes}>
+                  Collapse Visible
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Showing {filteredVehicleCatalog.length} of {vehicleCatalog.length} brands
+              </p>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
               <Input
                 value={newMakeName}
@@ -783,7 +970,7 @@ export function SettingsClient({
             </div>
 
             <div className="space-y-3">
-              {vehicleCatalog.map((make) => (
+              {filteredVehicleCatalog.map((make) => (
                 <div key={make.id} className="rounded-lg border border-border p-3 space-y-3">
                   <div className="flex items-center justify-between gap-2">
                     {editingMakeId === make.id ? (
@@ -812,10 +999,20 @@ export function SettingsClient({
                       </div>
                     ) : (
                       <>
-                        <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleMakeOpen(make.id)}
+                          className="flex items-center gap-2 text-left"
+                          aria-expanded={!!openMakeIds[make.id]}
+                        >
+                          {openMakeIds[make.id] ? (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          )}
                           <p className="font-semibold">{make.name}</p>
                           <Badge variant="secondary">{make.models.length} models</Badge>
-                        </div>
+                        </button>
                         <div className="flex items-center gap-2">
                           <Button
                             variant="outline"
@@ -839,69 +1036,76 @@ export function SettingsClient({
                     )}
                   </div>
 
-                  <div className="space-y-1">
-                    {make.models.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">No models yet</p>
-                    ) : (
-                      make.models.map((model) => (
-                        <div
-                          key={model.id}
-                          className="flex items-center justify-between rounded-md border border-border px-2 py-1.5"
-                        >
-                          {editingModelId === model.id ? (
-                            <div className="flex items-center gap-2 flex-1">
-                              <Input
-                                value={editingModelName}
-                                onChange={(e) => setEditingModelName(e.target.value)}
-                              />
-                              <Button
-                                size="sm"
-                                onClick={() => handleSaveEditModel(model.id)}
-                                disabled={isPending}
-                              >
-                                Save
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setEditingModelId(null);
-                                  setEditingModelName("");
-                                }}
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          ) : (
-                            <>
-                              <span className="text-sm">{model.name}</span>
-                              <div className="flex items-center gap-2">
+                  {openMakeIds[make.id] && (
+                    <div className="space-y-1">
+                      {make.models.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">No models yet</p>
+                      ) : (
+                        make.models.map((model) => (
+                          <div
+                            key={model.id}
+                            className="flex items-center justify-between rounded-md border border-border px-2 py-1.5"
+                          >
+                            {editingModelId === model.id ? (
+                              <div className="flex items-center gap-2 flex-1">
+                                <Input
+                                  value={editingModelName}
+                                  onChange={(e) => setEditingModelName(e.target.value)}
+                                />
                                 <Button
-                                  variant="outline"
                                   size="sm"
-                                  onClick={() => handleStartEditModel(model)}
+                                  onClick={() => handleSaveEditModel(model.id)}
+                                  disabled={isPending}
                                 >
-                                  <Pencil className="h-3 w-3 mr-1" />
-                                  Edit
+                                  Save
                                 </Button>
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => handleDeleteModel(model.id, model.name)}
-                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => {
+                                    setEditingModelId(null);
+                                    setEditingModelName("");
+                                  }}
                                 >
-                                  <Trash2 className="h-3 w-3 mr-1" />
-                                  Delete
+                                  Cancel
                                 </Button>
                               </div>
-                            </>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
+                            ) : (
+                              <>
+                                <span className="text-sm">{model.name}</span>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleStartEditModel(model)}
+                                  >
+                                    <Pencil className="h-3 w-3 mr-1" />
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleDeleteModel(model.id, model.name)}
+                                    className="text-destructive hover:text-destructive"
+                                  >
+                                    <Trash2 className="h-3 w-3 mr-1" />
+                                    Delete
+                                  </Button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
+              {filteredVehicleCatalog.length === 0 && (
+                <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+                  No brands match the current filters.
+                </div>
+              )}
             </div>
           </CardContent>
         )}
