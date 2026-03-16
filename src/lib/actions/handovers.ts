@@ -890,17 +890,33 @@ export async function listFilteredHandovers(
         vehicleMake: vehicles.make,
         vehicleModel: vehicles.model,
         vehicleRegistration: vehicles.registration,
+        photoCount: sql<number>`COUNT(${handoverPhotos.id})::int`,
       })
       .from(handovers)
       .innerJoin(vehicles, eq(handovers.vehicleId, vehicles.id))
+      .leftJoin(handoverPhotos, eq(handoverPhotos.handoverId, handovers.id))
       .where(whereClause)
+      .groupBy(
+        handovers.id,
+        handovers.date,
+        handovers.name,
+        handovers.status,
+        handovers.type,
+        handovers.mileage,
+        vehicles.make,
+        vehicles.model,
+        vehicles.registration
+      )
       .orderBy(orderFn(sortColumn))
       .limit(pageSize)
       .offset((page - 1) * pageSize),
   ]);
 
   return {
-    data,
+    data: data.map((row) => ({
+      ...row,
+      hasPhotos: row.photoCount > 0,
+    })),
     total: totalResult[0].value,
     page,
     pageSize,

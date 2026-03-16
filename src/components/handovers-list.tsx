@@ -13,6 +13,7 @@ import {
 import {
   Search,
   Car,
+  Check,
   Loader2,
   ChevronLeft,
   ChevronRight,
@@ -374,9 +375,10 @@ export function HandoversList({ filterOptions }: Props) {
                         onClick={() => toggleSort("make")}
                         className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
                       >
-                        Vehicle <SortIcon col="make" />
+                        Make <SortIcon col="make" />
                       </button>
                     </th>
+                    <th className="text-left p-3 font-medium">Model</th>
                     <th className="text-left p-3 font-medium">
                       <button
                         onClick={() => toggleSort("registration")}
@@ -410,6 +412,7 @@ export function HandoversList({ filterOptions }: Props) {
                         Status <SortIcon col="status" />
                       </button>
                     </th>
+                    <th className="text-left p-3 font-medium">Photos</th>
                     <th className="text-left p-3 font-medium">Mileage</th>
                   </tr>
                 </thead>
@@ -420,11 +423,14 @@ export function HandoversList({ filterOptions }: Props) {
                       className="border-b border-border last:border-0 hover:bg-accent/50 transition-colors"
                     >
                       <td className="p-3">
+                        {r.vehicleMake}
+                      </td>
+                      <td className="p-3">
                         <Link
                           href={`/handovers/${r.id}`}
                           className="font-medium text-primary hover:underline"
                         >
-                          {r.vehicleMake} {r.vehicleModel}
+                          {r.vehicleModel}
                         </Link>
                       </td>
                       <td className="p-3 font-mono">
@@ -448,6 +454,13 @@ export function HandoversList({ filterOptions }: Props) {
                           {r.status}
                         </Badge>
                       </td>
+                      <td className="p-3">
+                        {r.hasPhotos ? (
+                          <Check className="h-4 w-4 text-success" />
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </td>
                       <td className="p-3 text-muted-foreground">
                         {r.mileage?.toLocaleString() ?? "-"}
                       </td>
@@ -466,14 +479,14 @@ export function HandoversList({ filterOptions }: Props) {
               <Link key={r.id} href={`/handovers/${r.id}`}>
                 <Card className="hover:bg-accent/50 transition-colors">
                   <CardContent className="p-4">
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-start justify-between gap-2 mb-1">
                       <div className="flex items-center gap-2">
                         <Car className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">
-                          {r.vehicleMake} {r.vehicleModel}
+                        <span className="font-medium leading-tight">
+                          {r.vehicleMake}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 shrink-0">
                         <Badge variant="outline" className="text-[10px]">
                           {r.type === "delivery" ? "Delivery" : "Collection"}
                         </Badge>
@@ -486,15 +499,22 @@ export function HandoversList({ filterOptions }: Props) {
                         </Badge>
                       </div>
                     </div>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm">
+                      <span className="text-muted-foreground">Model: </span>
+                      <span className="font-medium">{r.vehicleModel}</span>
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-0.5">
                       {r.vehicleRegistration} &middot;{" "}
                       {new Date(r.date).toLocaleDateString()} &middot; {r.name}
                     </p>
-                    {r.mileage && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {r.mileage.toLocaleString()} miles
-                      </p>
-                    )}
+                    <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        Photos: {r.hasPhotos ? "✓" : "-"}
+                      </span>
+                      <span>
+                        Mileage: {r.mileage?.toLocaleString() ?? "-"}
+                      </span>
+                    </div>
                   </CardContent>
                 </Card>
               </Link>
