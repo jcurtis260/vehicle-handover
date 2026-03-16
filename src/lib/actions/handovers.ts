@@ -27,6 +27,7 @@ import {
   type CheckItemKey,
   type DeliveryCheckItemKey,
 } from "@/lib/check-items";
+import { ensureCatalogMakeModel } from "@/lib/actions/vehicle-catalog";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
@@ -74,6 +75,10 @@ const VALID_CATEGORIES = [
 const VALID_TYRE_POSITIONS = ["NSF", "NSR", "OSR", "OSF"] as const;
 const MAX_STRING = 255;
 const MAX_COMMENTS = 2000;
+
+function normalizeVehicleLabel(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
 
 function validateHandoverInput(input: HandoverInput) {
   if (!input.make || input.make.length > MAX_STRING)
@@ -142,12 +147,16 @@ export async function createHandover(input: HandoverInput) {
   if (!session?.user) throw new Error("Unauthorized");
 
   validateHandoverInput(input);
+  const normalizedMake = normalizeVehicleLabel(input.make);
+  const normalizedModel = normalizeVehicleLabel(input.model);
+
+  await ensureCatalogMakeModel(normalizedMake, normalizedModel);
 
   const [vehicle] = await db
     .insert(vehicles)
     .values({
-      make: input.make,
-      model: input.model,
+      make: normalizedMake,
+      model: normalizedModel,
       registration: input.registration.toUpperCase(),
       createdBy: session.user.id,
     })
@@ -229,6 +238,10 @@ export async function updateHandover(
   }
 
   validateHandoverInput(input);
+  const normalizedMake = normalizeVehicleLabel(input.make);
+  const normalizedModel = normalizeVehicleLabel(input.model);
+
+  await ensureCatalogMakeModel(normalizedMake, normalizedModel);
 
   const [existing] = await db
     .select()
@@ -247,8 +260,8 @@ export async function updateHandover(
   await db
     .update(vehicles)
     .set({
-      make: input.make,
-      model: input.model,
+      make: normalizedMake,
+      model: normalizedModel,
       registration: input.registration.toUpperCase(),
     })
     .where(eq(vehicles.id, existing.vehicleId));

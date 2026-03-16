@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { CHECK_ITEMS, CHECK_ITEM_LABELS, DELIVERY_CHECK_ITEMS, DELIVERY_CHECK_IT
 import { PhotoCapture } from "@/components/photo-capture";
 import { SignaturePad } from "@/components/signature-pad";
 import { createHandover, updateHandover } from "@/lib/actions/handovers";
+import { getVehicleCatalog } from "@/lib/actions/vehicle-catalog";
 import { ChevronDown, Loader2, Save, CheckCircle } from "lucide-react";
 
 interface CheckState {
@@ -39,6 +40,16 @@ interface DeliveryFormProps {
     signatureUrl?: string | null;
     signatoryName?: string;
   };
+}
+
+interface CatalogMake {
+  id: string;
+  name: string;
+  models: Array<{
+    id: string;
+    makeId: string;
+    name: string;
+  }>;
 }
 
 function Section({
@@ -81,6 +92,7 @@ export function DeliveryForm({ mode, handoverId, initialData }: DeliveryFormProp
   const [name, setName] = useState(initialData?.name || session?.user?.name || "");
   const [make, setMake] = useState(initialData?.make || "");
   const [model, setModel] = useState(initialData?.model || "");
+  const [customModel, setCustomModel] = useState("");
   const [registration, setRegistration] = useState(initialData?.registration || "");
   const [mileage, setMileage] = useState(
     initialData?.mileage?.toString() || ""
@@ -108,6 +120,34 @@ export function DeliveryForm({ mode, handoverId, initialData }: DeliveryFormProp
 
   const [otherComments, setOtherComments] = useState(initialData?.otherComments || "");
   const [saving, setSaving] = useState(false);
+  const [catalogMakes, setCatalogMakes] = useState<CatalogMake[]>([]);
+
+  const selectedMake = catalogMakes.find((m) => m.name === make);
+  const modelsForSelectedMake = selectedMake?.models ?? [];
+
+  useEffect(() => {
+    let alive = true;
+    getVehicleCatalog()
+      .then((catalog) => {
+        if (!alive) return;
+        setCatalogMakes(catalog);
+
+        if (initialData?.model) {
+          const makeMatch = catalog.find((m) => m.name === (initialData.make || ""));
+          const hasModel = makeMatch?.models.some((mm) => mm.name === initialData.model);
+          if (makeMatch && !hasModel) {
+            setModel("__other__");
+            setCustomModel(initialData.model);
+          }
+        }
+      })
+      .catch((err) => {
+        console.error("[VehicleCatalog] Failed to load catalog:", err);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [initialData?.make, initialData?.model]);
 
   async function uploadSignatureBlob(dataUrl: string): Promise<string> {
     const resp = await fetch(dataUrl);
@@ -124,7 +164,8 @@ export function DeliveryForm({ mode, handoverId, initialData }: DeliveryFormProp
   }
 
   async function handleSubmit(status: "draft" | "completed") {
-    if (!make || !model || !registration || !name) {
+    const resolvedModel = model === "__other__" ? customModel.trim() : model;
+    if (!make || !resolvedModel || !registration || !name) {
       alert("Please fill in all required vehicle fields.");
       return;
     }
@@ -152,7 +193,7 @@ export function DeliveryForm({ mode, handoverId, initialData }: DeliveryFormProp
 
       const payload = {
         make,
-        model,
+        model: resolvedModel,
         registration,
         date,
         name,
@@ -212,22 +253,55 @@ export function DeliveryForm({ mode, handoverId, initialData }: DeliveryFormProp
           </div>
           <div className="space-y-1">
             <label className="text-sm font-medium">Make *</label>
-            <Input
+            <select
               value={make}
-              onChange={(e) => setMake(e.target.value)}
-              placeholder="e.g. BMW"
+              onChange={(e) => {
+                setMake(e.target.value);
+                setModel("");
+                setCustomModel("");
+              }}
+              className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground"
               required
-            />
+            >
+              <option value="">Select make</option>
+              {catalogMakes.map((mk) => (
+                <option key={mk.id} value={mk.name}>
+                  {mk.name}
+                </option>
+              ))}
+              {make && !catalogMakes.some((mk) => mk.name === make) && (
+                <option value={make}>{make}</option>
+              )}
+            </select>
           </div>
           <div className="space-y-1">
             <label className="text-sm font-medium">Model *</label>
-            <Input
+            <select
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder="e.g. X5"
+              className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground"
               required
-            />
+            >
+              <option value="">Select model</option>
+              {modelsForSelectedMake.map((mm) => (
+                <option key={mm.id} value={mm.name}>
+                  {mm.name}
+                </option>
+              ))}
+              <option value="__other__">Other...</option>
+            </select>
           </div>
+          {model === "__other__" && (
+            <div className="space-y-1 sm:col-span-2">
+              <label className="text-sm font-medium">Other Model *</label>
+              <Input
+                value={customModel}
+                onChange={(e) => setCustomModel(e.target.value)}
+                placeholder="Enter model name"
+                required
+              />
+            </div>
+          )}
           <div className="space-y-1">
             <label className="text-sm font-medium">Registration *</label>
             <Input

@@ -18,6 +18,33 @@ async function runAutoMigrations() {
     await _sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_all_reports BOOLEAN NOT NULL DEFAULT false`;
     await _sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_edit_all_reports BOOLEAN NOT NULL DEFAULT false`;
     await _sql`ALTER TABLE handovers ADD COLUMN IF NOT EXISTS type VARCHAR(20) NOT NULL DEFAULT 'collection'`;
+    await _sql`
+      CREATE TABLE IF NOT EXISTS vehicle_makes (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(100) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `;
+    await _sql`
+      CREATE TABLE IF NOT EXISTS vehicle_models (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        make_id UUID NOT NULL REFERENCES vehicle_makes(id) ON DELETE CASCADE,
+        name VARCHAR(100) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `;
+    await _sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS vehicle_makes_name_lower_uq
+      ON vehicle_makes (LOWER(name))
+    `;
+    await _sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS vehicle_models_make_name_lower_uq
+      ON vehicle_models (make_id, LOWER(name))
+    `;
+    await _sql`
+      CREATE INDEX IF NOT EXISTS vehicle_models_make_id_idx
+      ON vehicle_models (make_id)
+    `;
     try { await _sql`ALTER TYPE photo_category ADD VALUE IF NOT EXISTS 'v5'`; } catch { /* already exists */ }
     try { await _sql`ALTER TYPE photo_category ADD VALUE IF NOT EXISTS 'signature'`; } catch { /* already exists */ }
   } catch (err) {

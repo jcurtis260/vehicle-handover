@@ -46,6 +46,21 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const vehicleMakes = pgTable("vehicle_makes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const vehicleModels = pgTable("vehicle_models", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  makeId: uuid("make_id")
+    .references(() => vehicleMakes.id, { onDelete: "cascade" })
+    .notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const vehicles = pgTable("vehicles", {
   id: uuid("id").defaultRandom().primaryKey(),
   make: varchar("make", { length: 100 }).notNull(),
@@ -112,6 +127,17 @@ export const handoverPhotos = pgTable("handover_photos", {
 export const usersRelations = relations(users, ({ many }) => ({
   vehicles: many(vehicles),
   handovers: many(handovers),
+}));
+
+export const vehicleMakesRelations = relations(vehicleMakes, ({ many }) => ({
+  models: many(vehicleModels),
+}));
+
+export const vehicleModelsRelations = relations(vehicleModels, ({ one }) => ({
+  make: one(vehicleMakes, {
+    fields: [vehicleModels.makeId],
+    references: [vehicleMakes.id],
+  }),
 }));
 
 export const vehiclesRelations = relations(vehicles, ({ one, many }) => ({

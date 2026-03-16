@@ -7,6 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createUser, deleteUser, updateUser } from "@/lib/actions/users";
 import {
+  addVehicleMake,
+  addVehicleModel,
+  deleteVehicleMake,
+  deleteVehicleModel,
+  renameVehicleMake,
+  renameVehicleModel,
+} from "@/lib/actions/vehicle-catalog";
+import {
   UserPlus,
   Trash2,
   Loader2,
@@ -33,16 +41,32 @@ interface UserItem {
   createdAt: Date;
 }
 
+interface VehicleModelItem {
+  id: string;
+  makeId: string;
+  name: string;
+}
+
+interface VehicleMakeItem {
+  id: string;
+  name: string;
+  models: VehicleModelItem[];
+}
+
 export function SettingsClient({
   initialUsers,
+  initialVehicleCatalog,
 }: {
   initialUsers: UserItem[];
+  initialVehicleCatalog: VehicleMakeItem[];
 }) {
   const [users, setUsers] = useState(initialUsers);
   const [usersSectionOpen, setUsersSectionOpen] = useState(false);
+  const [catalogSectionOpen, setCatalogSectionOpen] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [vehicleCatalog, setVehicleCatalog] = useState(initialVehicleCatalog);
 
   // Add user form state
   const [addName, setAddName] = useState("");
@@ -62,6 +86,16 @@ export function SettingsClient({
   const [editCanViewAllReports, setEditCanViewAllReports] = useState(false);
   const [editCanEditAllReports, setEditCanEditAllReports] = useState(false);
   const [editError, setEditError] = useState("");
+
+  // Vehicle catalog state
+  const [newMakeName, setNewMakeName] = useState("");
+  const [selectedMakeIdForModel, setSelectedMakeIdForModel] = useState("");
+  const [newModelName, setNewModelName] = useState("");
+  const [catalogError, setCatalogError] = useState("");
+  const [editingMakeId, setEditingMakeId] = useState<string | null>(null);
+  const [editingMakeName, setEditingMakeName] = useState("");
+  const [editingModelId, setEditingModelId] = useState<string | null>(null);
+  const [editingModelName, setEditingModelName] = useState("");
 
   function handleAdd() {
     if (!addName || !addEmail || !addPassword) return;
@@ -180,6 +214,150 @@ export function SettingsClient({
         setUsers((prev) => prev.filter((u) => u.id !== userId));
       } catch (err) {
         alert(err instanceof Error ? err.message : "Failed to delete user");
+      }
+    });
+  }
+
+  function handleAddMake() {
+    if (!newMakeName.trim()) return;
+    setCatalogError("");
+    startTransition(async () => {
+      try {
+        const created = await addVehicleMake(newMakeName);
+        setVehicleCatalog((prev) =>
+          [...prev, { ...created, models: [] }].sort((a, b) =>
+            a.name.localeCompare(b.name)
+          )
+        );
+        setNewMakeName("");
+      } catch (err) {
+        setCatalogError(
+          err instanceof Error ? err.message : "Failed to add make"
+        );
+      }
+    });
+  }
+
+  function handleDeleteMake(makeId: string, makeName: string) {
+    if (!confirm(`Delete make "${makeName}"?`)) return;
+    setCatalogError("");
+    startTransition(async () => {
+      try {
+        await deleteVehicleMake(makeId);
+        setVehicleCatalog((prev) => prev.filter((m) => m.id !== makeId));
+        if (selectedMakeIdForModel === makeId) setSelectedMakeIdForModel("");
+      } catch (err) {
+        setCatalogError(
+          err instanceof Error ? err.message : "Failed to delete make"
+        );
+      }
+    });
+  }
+
+  function handleStartEditMake(make: VehicleMakeItem) {
+    setEditingMakeId(make.id);
+    setEditingMakeName(make.name);
+  }
+
+  function handleSaveEditMake(makeId: string) {
+    if (!editingMakeName.trim()) return;
+    setCatalogError("");
+    startTransition(async () => {
+      try {
+        await renameVehicleMake(makeId, editingMakeName);
+        setVehicleCatalog((prev) =>
+          prev
+            .map((m) =>
+              m.id === makeId ? { ...m, name: editingMakeName.trim() } : m
+            )
+            .sort((a, b) => a.name.localeCompare(b.name))
+        );
+        setEditingMakeId(null);
+        setEditingMakeName("");
+      } catch (err) {
+        setCatalogError(
+          err instanceof Error ? err.message : "Failed to rename make"
+        );
+      }
+    });
+  }
+
+  function handleAddModel() {
+    if (!selectedMakeIdForModel || !newModelName.trim()) return;
+    setCatalogError("");
+    startTransition(async () => {
+      try {
+        const created = await addVehicleModel(selectedMakeIdForModel, newModelName);
+        setVehicleCatalog((prev) =>
+          prev.map((make) =>
+            make.id === selectedMakeIdForModel
+              ? {
+                  ...make,
+                  models: [...make.models, created].sort((a, b) =>
+                    a.name.localeCompare(b.name)
+                  ),
+                }
+              : make
+          )
+        );
+        setNewModelName("");
+      } catch (err) {
+        setCatalogError(
+          err instanceof Error ? err.message : "Failed to add model"
+        );
+      }
+    });
+  }
+
+  function handleDeleteModel(modelId: string, modelName: string) {
+    if (!confirm(`Delete model "${modelName}"?`)) return;
+    setCatalogError("");
+    startTransition(async () => {
+      try {
+        await deleteVehicleModel(modelId);
+        setVehicleCatalog((prev) =>
+          prev.map((make) => ({
+            ...make,
+            models: make.models.filter((model) => model.id !== modelId),
+          }))
+        );
+      } catch (err) {
+        setCatalogError(
+          err instanceof Error ? err.message : "Failed to delete model"
+        );
+      }
+    });
+  }
+
+  function handleStartEditModel(model: VehicleModelItem) {
+    setEditingModelId(model.id);
+    setEditingModelName(model.name);
+  }
+
+  function handleSaveEditModel(modelId: string) {
+    if (!editingModelName.trim()) return;
+    setCatalogError("");
+    startTransition(async () => {
+      try {
+        await renameVehicleModel(modelId, editingModelName);
+        setVehicleCatalog((prev) =>
+          prev.map((make) => ({
+            ...make,
+            models: make.models
+              .map((model) =>
+                model.id === modelId
+                  ? { ...model, name: editingModelName.trim() }
+                  : model
+              )
+              .sort((a, b) => a.name.localeCompare(b.name)),
+          }))
+        );
+        setEditingModelId(null);
+        setEditingModelName("");
+      } catch (err) {
+        setCatalogError(
+          err instanceof Error ? err.message : "Failed to rename model"
+        );
       }
     });
   }
@@ -536,6 +714,192 @@ export function SettingsClient({
                       </div>
                     </div>
                   )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <button
+            type="button"
+            onClick={() => setCatalogSectionOpen((prev) => !prev)}
+            className="w-full flex items-center justify-between text-left"
+            aria-expanded={catalogSectionOpen}
+            aria-controls="settings-vehicle-catalog-section"
+          >
+            <CardTitle className="text-lg">
+              Vehicle Make/Model List ({vehicleCatalog.length} makes)
+            </CardTitle>
+            {catalogSectionOpen ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
+          </button>
+        </CardHeader>
+        {catalogSectionOpen && (
+          <CardContent id="settings-vehicle-catalog-section" className="space-y-4">
+            {catalogError && (
+              <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
+                {catalogError}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
+              <Input
+                value={newMakeName}
+                onChange={(e) => setNewMakeName(e.target.value)}
+                placeholder="Add make (e.g. BMW)"
+              />
+              <Button onClick={handleAddMake} disabled={isPending}>
+                Add Make
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
+              <select
+                value={selectedMakeIdForModel}
+                onChange={(e) => setSelectedMakeIdForModel(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground"
+              >
+                <option value="">Select make for new model</option>
+                {vehicleCatalog.map((make) => (
+                  <option key={make.id} value={make.id}>
+                    {make.name}
+                  </option>
+                ))}
+              </select>
+              <Input
+                value={newModelName}
+                onChange={(e) => setNewModelName(e.target.value)}
+                placeholder="Add model (e.g. 3 Series)"
+              />
+              <Button onClick={handleAddModel} disabled={isPending}>
+                Add Model
+              </Button>
+            </div>
+
+            <div className="space-y-3">
+              {vehicleCatalog.map((make) => (
+                <div key={make.id} className="rounded-lg border border-border p-3 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    {editingMakeId === make.id ? (
+                      <div className="flex items-center gap-2 flex-1">
+                        <Input
+                          value={editingMakeName}
+                          onChange={(e) => setEditingMakeName(e.target.value)}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => handleSaveEditMake(make.id)}
+                          disabled={isPending}
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setEditingMakeId(null);
+                            setEditingMakeName("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold">{make.name}</p>
+                          <Badge variant="secondary">{make.models.length} models</Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleStartEditMake(make)}
+                          >
+                            <Pencil className="h-3 w-3 mr-1" />
+                            Edit
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteMake(make.id, make.name)}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-3 w-3 mr-1" />
+                            Delete
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    {make.models.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No models yet</p>
+                    ) : (
+                      make.models.map((model) => (
+                        <div
+                          key={model.id}
+                          className="flex items-center justify-between rounded-md border border-border px-2 py-1.5"
+                        >
+                          {editingModelId === model.id ? (
+                            <div className="flex items-center gap-2 flex-1">
+                              <Input
+                                value={editingModelName}
+                                onChange={(e) => setEditingModelName(e.target.value)}
+                              />
+                              <Button
+                                size="sm"
+                                onClick={() => handleSaveEditModel(model.id)}
+                                disabled={isPending}
+                              >
+                                Save
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingModelId(null);
+                                  setEditingModelName("");
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="text-sm">{model.name}</span>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleStartEditModel(model)}
+                                >
+                                  <Pencil className="h-3 w-3 mr-1" />
+                                  Edit
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleDeleteModel(model.id, model.name)}
+                                  className="text-destructive hover:text-destructive"
+                                >
+                                  <Trash2 className="h-3 w-3 mr-1" />
+                                  Delete
+                                </Button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
