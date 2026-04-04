@@ -142,12 +142,26 @@ function HandoverDataCell({
           {fuelTypeLabel(row.fuelType)}
         </span>
       );
-    case "collectionOutcome":
+    case "collectionOutcome": {
+      const o = row.collectionOutcome;
+      if (o === "accepted") {
+        return (
+          <Badge variant="success">{collectionOutcomeLabel(o).toLowerCase()}</Badge>
+        );
+      }
+      if (o === "rejected") {
+        return (
+          <Badge variant="destructive">
+            {collectionOutcomeLabel(o).toLowerCase()}
+          </Badge>
+        );
+      }
       return (
         <span className="text-muted-foreground">
-          {collectionOutcomeLabel(row.collectionOutcome)}
+          {collectionOutcomeLabel(o)}
         </span>
       );
+    }
     default:
       return null;
   }
