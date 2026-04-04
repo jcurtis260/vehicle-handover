@@ -89,7 +89,7 @@ export const handovers = pgTable("handovers", {
   otherComments: text("other_comments"),
   status: handoverStatusEnum("status").notNull().default("draft"),
   type: varchar("type", { length: 20 }).notNull().default("collection"),
-  /** Collection handovers: petrol | diesel | petrol_hybrid | diesel_hybrid */
+  /** Collection handovers: petrol | diesel | electric | petrol_hybrid | diesel_hybrid */
   fuelType: varchar("fuel_type", { length: 40 }),
   /** Collection handovers: accepted | rejected */
   collectionOutcome: varchar("collection_outcome", { length: 20 }),

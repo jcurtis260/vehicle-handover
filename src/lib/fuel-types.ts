@@ -1,6 +1,7 @@
 export const FUEL_TYPE_VALUES = [
   "petrol",
   "diesel",
+  "electric",
   "petrol_hybrid",
   "diesel_hybrid",
 ] as const;
@@ -10,6 +11,7 @@ export type FuelTypeValue = (typeof FUEL_TYPE_VALUES)[number];
 export const FUEL_TYPE_LABELS: Record<FuelTypeValue, string> = {
   petrol: "Petrol",
   diesel: "Diesel",
+  electric: "Electric",
   petrol_hybrid: "Petrol Hybrid",
   diesel_hybrid: "Diesel Hybrid",
 };
