@@ -165,6 +165,8 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
   const [tyreError, setTyreError] = useState("");
   const [tyresOpen, setTyresOpen] = useState(false);
   const tyresSectionRef = useRef<HTMLDivElement>(null);
+  const [collectionOutcomeError, setCollectionOutcomeError] = useState(false);
+  const collectionOutcomeSectionRef = useRef<HTMLDivElement>(null);
 
   const [photos, setPhotos] = useState<PhotoItem[]>(initialData?.photos || []);
   const [catalogMakes, setCatalogMakes] = useState<CatalogMake[]>([]);
@@ -217,6 +219,19 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
       alert("Please fill in the vehicle details and name.");
       return;
     }
+
+    if (!collectionOutcome) {
+      setCollectionOutcomeError(true);
+      alert("Please select whether the collection was accepted or rejected.");
+      setTimeout(() => {
+        collectionOutcomeSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 100);
+      return;
+    }
+    setCollectionOutcomeError(false);
 
     setTyreError("");
     if (status === "completed") {
@@ -508,14 +523,28 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
         />
       </Section>
 
-      <Section title="Collection outcome" defaultOpen={true}>
+      <div ref={collectionOutcomeSectionRef}>
+      <Section title="Collection outcome *" defaultOpen={true}>
         <p className="text-sm text-muted-foreground">
           Was this vehicle collection accepted or rejected?
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+        {collectionOutcomeError && (
+          <p className="text-sm text-destructive font-medium" role="alert">
+            Please choose Accepted or Rejected.
+          </p>
+        )}
+        <div
+          className={cn(
+            "grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 rounded-lg p-1 -m-1 transition-colors",
+            collectionOutcomeError && "ring-2 ring-destructive ring-offset-2 ring-offset-background"
+          )}
+        >
           <button
             type="button"
-            onClick={() => setCollectionOutcome("accepted")}
+            onClick={() => {
+              setCollectionOutcome("accepted");
+              setCollectionOutcomeError(false);
+            }}
             className={cn(
               "min-h-[48px] rounded-lg border-2 px-4 py-3 text-sm font-semibold transition-colors text-left",
               collectionOutcome === "accepted"
@@ -527,7 +556,10 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
           </button>
           <button
             type="button"
-            onClick={() => setCollectionOutcome("rejected")}
+            onClick={() => {
+              setCollectionOutcome("rejected");
+              setCollectionOutcomeError(false);
+            }}
             className={cn(
               "min-h-[48px] rounded-lg border-2 px-4 py-3 text-sm font-semibold transition-colors text-left",
               collectionOutcome === "rejected"
@@ -539,6 +571,7 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
           </button>
         </div>
       </Section>
+      </div>
 
       <div className="fixed bottom-16 lg:bottom-0 left-0 right-0 lg:left-64 z-40 border-t border-border bg-card p-3 safe-bottom">
         <div className="flex gap-2 max-w-4xl mx-auto">

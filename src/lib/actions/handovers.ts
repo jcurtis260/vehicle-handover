@@ -117,8 +117,8 @@ function validateHandoverInput(input: HandoverInput) {
     if (ft && !FUEL_TYPE_VALUES.includes(ft as FuelTypeValue))
       throw new Error("Invalid fuel type");
     const co = input.collectionOutcome?.trim();
-    if (co && !COLLECTION_OUTCOME_VALUES.includes(co as CollectionOutcomeValue))
-      throw new Error("Invalid collection outcome");
+    if (!co || !COLLECTION_OUTCOME_VALUES.includes(co as CollectionOutcomeValue))
+      throw new Error("Collection outcome is required");
   }
 
   for (const t of input.tyres) {
