@@ -10,6 +10,14 @@ import {
   listFilteredHandovers,
   type HandoverFilters,
 } from "@/lib/actions/handovers";
+import { saveHandoverListColumnPreferences } from "@/lib/actions/user-preferences";
+import {
+  HANDOVER_LIST_COLUMN_IDS,
+  handoverListColumnLabel,
+  defaultVisibleHandoverListColumns,
+  type HandoverListColumnId,
+} from "@/lib/handovers-list-columns";
+import { fuelTypeLabel, collectionOutcomeLabel } from "@/lib/fuel-types";
 import {
   Search,
   Car,
@@ -18,6 +26,7 @@ import {
   ChevronLeft,
   ChevronRight,
   SlidersHorizontal,
+  Columns3,
   X,
   ArrowUpDown,
 } from "lucide-react";
@@ -35,11 +44,119 @@ type ResultRow = Awaited<
 
 interface Props {
   filterOptions: FilterOptions;
+  initialVisibleColumns: HandoverListColumnId[];
 }
 
 const PAGE_SIZE = 20;
 
-export function HandoversList({ filterOptions }: Props) {
+const SORTABLE_SORT_KEYS = new Set<string>([
+  "date",
+  "make",
+  "registration",
+  "status",
+  "type",
+  "fuelType",
+  "collectionOutcome",
+]);
+
+function sortKeyFromColumnId(
+  col: HandoverListColumnId
+): HandoverFilters["sortBy"] | null {
+  if (SORTABLE_SORT_KEYS.has(col)) {
+    return col as NonNullable<HandoverFilters["sortBy"]>;
+  }
+  return null;
+}
+
+function HandoverDataCell({
+  col,
+  row,
+  modelAsLink,
+}: {
+  col: HandoverListColumnId;
+  row: ResultRow;
+  modelAsLink: boolean;
+}) {
+  switch (col) {
+    case "make":
+      return (
+        <span className="max-w-[160px] truncate block" title={row.vehicleMake}>
+          {row.vehicleMake}
+        </span>
+      );
+    case "model":
+      if (modelAsLink) {
+        return (
+          <Link
+            href={`/handovers/${row.id}`}
+            className="font-medium text-primary hover:underline"
+          >
+            {row.vehicleModel}
+          </Link>
+        );
+      }
+      return <span className="font-medium">{row.vehicleModel}</span>;
+    case "registration":
+      return (
+        <span className="font-mono" title={row.vehicleRegistration}>
+          {row.vehicleRegistration}
+        </span>
+      );
+    case "date":
+      return <>{new Date(row.date).toLocaleDateString()}</>;
+    case "inspector":
+      return (
+        <span className="max-w-[120px] truncate block" title={row.name}>
+          {row.name}
+        </span>
+      );
+    case "type":
+      return (
+        <Badge variant="outline" className="text-[10px]">
+          {row.type === "delivery" ? "Delivery" : "Collection"}
+        </Badge>
+      );
+    case "status":
+      return (
+        <Badge
+          variant={row.status === "completed" ? "success" : "warning"}
+        >
+          {row.status}
+        </Badge>
+      );
+    case "photos":
+      return row.hasPhotos ? (
+        <Check className="h-4 w-4 text-success" />
+      ) : (
+        <span className="text-muted-foreground">-</span>
+      );
+    case "mileage":
+      return (
+        <span className="text-muted-foreground">
+          {row.mileage?.toLocaleString() ?? "-"}
+        </span>
+      );
+    case "fuelType":
+      return (
+        <span className="text-muted-foreground">
+          {fuelTypeLabel(row.fuelType)}
+        </span>
+      );
+    case "collectionOutcome":
+      return (
+        <span className="text-muted-foreground">
+          {collectionOutcomeLabel(row.collectionOutcome)}
+        </span>
+      );
+    default:
+      return null;
+  }
+}
+
+export function HandoversList({
+  filterOptions,
+  initialVisibleColumns,
+}: Props) {
   const [isPending, startTransition] = useTransition();
   const [results, setResults] = useState<ResultRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -47,11 +164,23 @@ export function HandoversList({ filterOptions }: Props) {
   const [totalPages, setTotalPages] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(true);
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [visibleColumns, setVisibleColumns] =
+    useState<HandoverListColumnId[]>(initialVisibleColumns);
+  const [draftColumns, setDraftColumns] = useState<Set<HandoverListColumnId>>(
+    () => new Set(initialVisibleColumns)
+  );
+  const [savingColumns, setSavingColumns] = useState(false);
 
   const [filters, setFilters] = useState<HandoverFilters>({
     sortBy: "date",
     sortDir: "desc",
   });
+
+  useEffect(() => {
+    setVisibleColumns(initialVisibleColumns);
+    setDraftColumns(new Set(initialVisibleColumns));
+  }, [initialVisibleColumns]);
 
   const fetchData = useCallback(
     (f: HandoverFilters, p: number) => {
@@ -91,9 +220,53 @@ export function HandoversList({ filterOptions }: Props) {
   function toggleSort(col: HandoverFilters["sortBy"]) {
     const newDir =
       filters.sortBy === col && filters.sortDir === "desc" ? "asc" : "desc";
-    const updated = { ...filters, sortBy: col, sortDir: newDir as "asc" | "desc" };
+    const updated = {
+      ...filters,
+      sortBy: col,
+      sortDir: newDir as "asc" | "desc",
+    };
     setFilters(updated);
     fetchData(updated, 1);
+  }
+
+  function openColumnsPanel() {
+    setDraftColumns(new Set(visibleColumns));
+    setColumnsOpen(true);
+  }
+
+  async function saveColumnPreferences() {
+    const ordered = HANDOVER_LIST_COLUMN_IDS.filter((id) => draftColumns.has(id));
+    if (ordered.length === 0) {
+      alert("Select at least one column.");
+      return;
+    }
+    setSavingColumns(true);
+    try {
+      await saveHandoverListColumnPreferences(ordered);
+      setVisibleColumns(ordered);
+      setColumnsOpen(false);
+    } catch {
+      alert("Could not save column preferences.");
+    } finally {
+      setSavingColumns(false);
+    }
+  }
+
+  function resetColumnsToDefault() {
+    setDraftColumns(new Set(defaultVisibleHandoverListColumns()));
+  }
+
+  function toggleDraftColumn(id: HandoverListColumnId) {
+    setDraftColumns((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        if (next.size <= 1) return prev;
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   }
 
   const hasActiveFilters =
@@ -119,18 +292,99 @@ export function HandoversList({ filterOptions }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <h1 className="text-2xl font-bold">All Handovers</h1>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setFiltersOpen((v) => !v)}
-          className="lg:hidden"
-        >
-          <SlidersHorizontal className="h-4 w-4 mr-1.5" />
-          Filters
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={openColumnsPanel}
+            className="min-h-[44px] sm:min-h-9"
+          >
+            <Columns3 className="h-4 w-4 mr-1.5" />
+            Columns
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setFiltersOpen((v) => !v)}
+            className="lg:hidden min-h-[44px] sm:min-h-9"
+          >
+            <SlidersHorizontal className="h-4 w-4 mr-1.5" />
+            Filters
+          </Button>
+        </div>
       </div>
+
+      {columnsOpen && (
+        <Card className="border-primary/30">
+          <CardContent className="p-4 space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-sm font-semibold">Visible columns</label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="sm:hidden min-h-[44px] min-w-[44px]"
+                onClick={() => setColumnsOpen(false)}
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Choose which columns appear in the table and on mobile. At least
+              one column must stay on.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {HANDOVER_LIST_COLUMN_IDS.map((id) => (
+                <label
+                  key={id}
+                  className="flex items-center gap-3 min-h-[44px] min-w-0 cursor-pointer rounded-md border border-border px-3 py-2"
+                >
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-border accent-primary shrink-0"
+                    checked={draftColumns.has(id)}
+                    onChange={() => toggleDraftColumn(id)}
+                  />
+                  <span className="text-sm">{handoverListColumnLabel(id)}</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button
+                type="button"
+                onClick={saveColumnPreferences}
+                disabled={savingColumns || draftColumns.size === 0}
+                className="min-h-[44px] sm:min-h-9"
+              >
+                {savingColumns ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : null}
+                Save columns
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={resetColumnsToDefault}
+                disabled={savingColumns}
+                className="min-h-[44px] sm:min-h-9"
+              >
+                Reset to default
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="hidden sm:inline-flex"
+                onClick={() => setColumnsOpen(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters */}
       <Card
@@ -367,107 +621,54 @@ export function HandoversList({ filterOptions }: Props) {
             <div
               className={`border border-border rounded-xl overflow-hidden ${isPending ? "opacity-60 pointer-events-none" : ""}`}
             >
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/50">
-                    <th className="text-left p-3 font-medium">
-                      <button
-                        onClick={() => toggleSort("make")}
-                        className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
-                      >
-                        Make <SortIcon col="make" />
-                      </button>
-                    </th>
-                    <th className="text-left p-3 font-medium">Model</th>
-                    <th className="text-left p-3 font-medium">
-                      <button
-                        onClick={() => toggleSort("registration")}
-                        className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
-                      >
-                        Registration <SortIcon col="registration" />
-                      </button>
-                    </th>
-                    <th className="text-left p-3 font-medium">
-                      <button
-                        onClick={() => toggleSort("date")}
-                        className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
-                      >
-                        Date <SortIcon col="date" />
-                      </button>
-                    </th>
-                    <th className="text-left p-3 font-medium">Inspector</th>
-                    <th className="text-left p-3 font-medium">
-                      <button
-                        onClick={() => toggleSort("type")}
-                        className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
-                      >
-                        Type <SortIcon col="type" />
-                      </button>
-                    </th>
-                    <th className="text-left p-3 font-medium">
-                      <button
-                        onClick={() => toggleSort("status")}
-                        className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
-                      >
-                        Status <SortIcon col="status" />
-                      </button>
-                    </th>
-                    <th className="text-left p-3 font-medium">Photos</th>
-                    <th className="text-left p-3 font-medium">Mileage</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {results.map((r) => (
-                    <tr
-                      key={r.id}
-                      className="border-b border-border last:border-0 hover:bg-accent/50 transition-colors"
-                    >
-                      <td className="p-3">
-                        {r.vehicleMake}
-                      </td>
-                      <td className="p-3">
-                        <Link
-                          href={`/handovers/${r.id}`}
-                          className="font-medium text-primary hover:underline"
-                        >
-                          {r.vehicleModel}
-                        </Link>
-                      </td>
-                      <td className="p-3 font-mono">
-                        {r.vehicleRegistration}
-                      </td>
-                      <td className="p-3">
-                        {new Date(r.date).toLocaleDateString()}
-                      </td>
-                      <td className="p-3">{r.name}</td>
-                      <td className="p-3">
-                        <Badge variant="outline" className="text-[10px]">
-                          {r.type === "delivery" ? "Delivery" : "Collection"}
-                        </Badge>
-                      </td>
-                      <td className="p-3">
-                        <Badge
-                          variant={
-                            r.status === "completed" ? "success" : "warning"
-                          }
-                        >
-                          {r.status}
-                        </Badge>
-                      </td>
-                      <td className="p-3">
-                        {r.hasPhotos ? (
-                          <Check className="h-4 w-4 text-success" />
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </td>
-                      <td className="p-3 text-muted-foreground">
-                        {r.mileage?.toLocaleString() ?? "-"}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[960px]">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/50">
+                      {visibleColumns.map((col) => {
+                        const sk = sortKeyFromColumnId(col);
+                        return (
+                          <th
+                            key={col}
+                            className="text-left p-3 font-medium whitespace-nowrap"
+                          >
+                            {sk ? (
+                              <button
+                                type="button"
+                                onClick={() => toggleSort(sk)}
+                                className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+                              >
+                                {handoverListColumnLabel(col)}{" "}
+                                <SortIcon col={sk} />
+                              </button>
+                            ) : (
+                              handoverListColumnLabel(col)
+                            )}
+                          </th>
+                        );
+                      })}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {results.map((r) => (
+                      <tr
+                        key={r.id}
+                        className="border-b border-border last:border-0 hover:bg-accent/50 transition-colors"
+                      >
+                        {visibleColumns.map((col) => (
+                          <td key={col} className="p-3 align-top">
+                            <HandoverDataCell
+                              col={col}
+                              row={r}
+                              modelAsLink
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
@@ -478,43 +679,30 @@ export function HandoversList({ filterOptions }: Props) {
             {results.map((r) => (
               <Link key={r.id} href={`/handovers/${r.id}`}>
                 <Card className="hover:bg-accent/50 transition-colors">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <div className="flex items-center gap-2">
-                        <Car className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium leading-tight">
-                          {r.vehicleMake}
+                  <CardContent className="p-4 space-y-2">
+                    <div className="flex items-start gap-2 mb-1">
+                      <Car className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Handover
+                      </span>
+                    </div>
+                    {visibleColumns.map((col) => (
+                      <div
+                        key={col}
+                        className="flex gap-2 text-sm min-w-0 items-start"
+                      >
+                        <span className="text-muted-foreground shrink-0 w-[118px]">
+                          {handoverListColumnLabel(col)}
                         </span>
+                        <div className="min-w-0 flex-1">
+                          <HandoverDataCell
+                            col={col}
+                            row={r}
+                            modelAsLink={false}
+                          />
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <Badge variant="outline" className="text-[10px]">
-                          {r.type === "delivery" ? "Delivery" : "Collection"}
-                        </Badge>
-                        <Badge
-                          variant={
-                            r.status === "completed" ? "success" : "warning"
-                          }
-                        >
-                          {r.status}
-                        </Badge>
-                      </div>
-                    </div>
-                    <p className="text-sm">
-                      <span className="text-muted-foreground">Model: </span>
-                      <span className="font-medium">{r.vehicleModel}</span>
-                    </p>
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                      {r.vehicleRegistration} &middot;{" "}
-                      {new Date(r.date).toLocaleDateString()} &middot; {r.name}
-                    </p>
-                    <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
-                      <span className="inline-flex items-center gap-1">
-                        Photos: {r.hasPhotos ? "✓" : "-"}
-                      </span>
-                      <span>
-                        Mileage: {r.mileage?.toLocaleString() ?? "-"}
-                      </span>
-                    </div>
+                    ))}
                   </CardContent>
                 </Card>
               </Link>

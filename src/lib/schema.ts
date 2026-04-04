@@ -7,8 +7,10 @@ import {
   boolean,
   integer,
   pgEnum,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+import type { UiPreferences } from "@/lib/ui-preferences";
 
 export const roleEnum = pgEnum("role", ["admin", "user"]);
 export const handoverStatusEnum = pgEnum("handover_status", [
@@ -43,6 +45,7 @@ export const users = pgTable("users", {
   canViewAllReports: boolean("can_view_all_reports").notNull().default(false),
   canEditAllReports: boolean("can_edit_all_reports").notNull().default(false),
   lastLoginAt: timestamp("last_login_at"),
+  uiPreferences: jsonb("ui_preferences").$type<UiPreferences | null>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

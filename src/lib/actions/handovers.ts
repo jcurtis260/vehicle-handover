@@ -829,7 +829,14 @@ export interface HandoverFilters {
   inspectorId?: string;
   dateFrom?: string;
   dateTo?: string;
-  sortBy?: "date" | "make" | "registration" | "status" | "type";
+  sortBy?:
+    | "date"
+    | "make"
+    | "registration"
+    | "status"
+    | "type"
+    | "fuelType"
+    | "collectionOutcome";
   sortDir?: "asc" | "desc";
 }
 
@@ -901,6 +908,10 @@ export async function listFilteredHandovers(
         return handovers.status;
       case "type":
         return handovers.type;
+      case "fuelType":
+        return handovers.fuelType;
+      case "collectionOutcome":
+        return handovers.collectionOutcome;
       default:
         return handovers.date;
     }
@@ -923,6 +934,8 @@ export async function listFilteredHandovers(
         status: handovers.status,
         type: handovers.type,
         mileage: handovers.mileage,
+        fuelType: handovers.fuelType,
+        collectionOutcome: handovers.collectionOutcome,
         vehicleMake: vehicles.make,
         vehicleModel: vehicles.model,
         vehicleRegistration: vehicles.registration,
@@ -939,6 +952,8 @@ export async function listFilteredHandovers(
         handovers.status,
         handovers.type,
         handovers.mileage,
+        handovers.fuelType,
+        handovers.collectionOutcome,
         vehicles.make,
         vehicles.model,
         vehicles.registration
