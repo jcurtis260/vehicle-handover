@@ -93,6 +93,8 @@ export const handovers = pgTable("handovers", {
   fuelType: varchar("fuel_type", { length: 40 }),
   /** Collection handovers: accepted | rejected */
   collectionOutcome: varchar("collection_outcome", { length: 20 }),
+  /** When collection is rejected */
+  collectionRejectionReason: text("collection_rejection_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

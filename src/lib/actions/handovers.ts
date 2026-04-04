@@ -73,6 +73,8 @@ interface HandoverInput {
   fuelType?: string | null;
   /** Collection only */
   collectionOutcome?: string | null;
+  /** Collection only; required when collectionOutcome is rejected */
+  collectionRejectionReason?: string | null;
   checks: CheckInput[];
   tyres: TyreInput[];
   photos?: PhotoInput[];
@@ -119,6 +121,11 @@ function validateHandoverInput(input: HandoverInput) {
     const co = input.collectionOutcome?.trim();
     if (!co || !COLLECTION_OUTCOME_VALUES.includes(co as CollectionOutcomeValue))
       throw new Error("Collection outcome is required");
+    if (co === "rejected") {
+      const rr = input.collectionRejectionReason?.trim();
+      if (!rr) throw new Error("Rejection reason is required when collection is rejected");
+      if (rr.length > MAX_COMMENTS) throw new Error("Rejection reason too long");
+    }
   }
 
   for (const t of input.tyres) {
@@ -208,6 +215,11 @@ export async function createHandover(input: HandoverInput) {
       collectionOutcome:
         handoverType === "collection"
           ? input.collectionOutcome?.trim() || null
+          : null,
+      collectionRejectionReason:
+        handoverType === "collection" &&
+        input.collectionOutcome?.trim() === "rejected"
+          ? input.collectionRejectionReason?.trim() || null
           : null,
     })
     .returning();
@@ -315,6 +327,10 @@ export async function updateHandover(
         ? {
             fuelType: input.fuelType?.trim() || null,
             collectionOutcome: input.collectionOutcome?.trim() || null,
+            collectionRejectionReason:
+              input.collectionOutcome?.trim() === "rejected"
+                ? input.collectionRejectionReason?.trim() || null
+                : null,
           }
         : {}),
       updatedAt: new Date(),

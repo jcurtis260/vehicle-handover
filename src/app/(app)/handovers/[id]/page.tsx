@@ -151,6 +151,15 @@ export default async function HandoverReviewPage({
                 </dd>
               </div>
             )}
+            {!isDelivery &&
+              handover.collectionOutcome === "rejected" && (
+                <div className="col-span-2 sm:col-span-3">
+                  <dt className="text-muted-foreground">Rejection reason</dt>
+                  <dd className="font-medium whitespace-pre-wrap mt-1">
+                    {handover.collectionRejectionReason?.trim() || "N/A"}
+                  </dd>
+                </div>
+              )}
           </dl>
         </CardContent>
       </Card>

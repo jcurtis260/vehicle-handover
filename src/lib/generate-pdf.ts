@@ -301,6 +301,34 @@ export async function generateHandoverPdf(
 
   doc.y = detailBoxY + detailBoxH + 2;
 
+  if (
+    !isDelivery &&
+    handover.collectionOutcome === "rejected" &&
+    handover.collectionRejectionReason?.trim()
+  ) {
+    drawSectionTitle(doc, "Rejection reason");
+    const pad = 10;
+    const textW = WIDTH - pad * 2;
+    const rejText = handover.collectionRejectionReason.trim();
+    doc.fontSize(9).font("Helvetica");
+    const textH = doc.heightOfString(rejText, { width: textW });
+    const boxH = textH + pad * 2;
+    ensureSpace(doc, boxH + 4);
+    const boxY = doc.y;
+    doc
+      .roundedRect(LEFT, boxY, WIDTH, boxH, 3)
+      .fillAndStroke(LIGHT_BG, BORDER);
+    doc
+      .fontSize(9)
+      .font("Helvetica")
+      .fillColor(DARK)
+      .text(rejText, LEFT + pad, boxY + pad, {
+        width: textW,
+        lineGap: 3,
+      });
+    doc.y = boxY + boxH + 4;
+  }
+
   const allLabels: Record<string, string> = {
     ...CHECK_ITEM_LABELS,
     ...DELIVERY_CHECK_ITEM_LABELS,

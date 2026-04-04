@@ -69,6 +69,7 @@ interface HandoverFormProps {
     otherComments: string;
     fuelType?: string | null;
     collectionOutcome?: string | null;
+    collectionRejectionReason?: string | null;
     checks: Record<string, CheckState>;
     tyres: Record<string, TyreState>;
     photos: PhotoItem[];
@@ -144,6 +145,9 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
     const o = initialData?.collectionOutcome;
     return o === "accepted" || o === "rejected" ? o : null;
   });
+  const [collectionRejectionReason, setCollectionRejectionReason] = useState(
+    initialData?.collectionRejectionReason || ""
+  );
 
   const [checks, setChecks] = useState<Record<string, CheckState>>(() => {
     if (initialData?.checks) return initialData.checks;
@@ -166,7 +170,9 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
   const [tyresOpen, setTyresOpen] = useState(false);
   const tyresSectionRef = useRef<HTMLDivElement>(null);
   const [collectionOutcomeError, setCollectionOutcomeError] = useState(false);
+  const [rejectionReasonError, setRejectionReasonError] = useState(false);
   const collectionOutcomeSectionRef = useRef<HTMLDivElement>(null);
+  const rejectionReasonRef = useRef<HTMLDivElement>(null);
 
   const [photos, setPhotos] = useState<PhotoItem[]>(initialData?.photos || []);
   const [catalogMakes, setCatalogMakes] = useState<CatalogMake[]>([]);
@@ -233,6 +239,19 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
     }
     setCollectionOutcomeError(false);
 
+    if (collectionOutcome === "rejected" && !collectionRejectionReason.trim()) {
+      setRejectionReasonError(true);
+      alert("Please enter a rejection reason.");
+      setTimeout(() => {
+        rejectionReasonRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 100);
+      return;
+    }
+    setRejectionReasonError(false);
+
     setTyreError("");
     if (status === "completed") {
       const incomplete = TYRE_POSITIONS.filter(
@@ -262,6 +281,10 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
         otherComments,
         fuelType: fuelType.trim() || null,
         collectionOutcome,
+        collectionRejectionReason:
+          collectionOutcome === "rejected"
+            ? collectionRejectionReason.trim()
+            : null,
         status,
         type: "collection" as const,
         checks: CHECK_ITEMS.map((key) => ({
@@ -544,6 +567,8 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
             onClick={() => {
               setCollectionOutcome("accepted");
               setCollectionOutcomeError(false);
+              setCollectionRejectionReason("");
+              setRejectionReasonError(false);
             }}
             className={cn(
               "min-h-[48px] rounded-lg border-2 px-4 py-3 text-sm font-semibold transition-colors text-left",
@@ -570,6 +595,34 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
             Rejected
           </button>
         </div>
+        {collectionOutcome === "rejected" && (
+          <div ref={rejectionReasonRef} className="space-y-1.5 pt-2">
+            <label className="text-sm font-medium" htmlFor="rejection-reason">
+              Rejection reason *
+            </label>
+            {rejectionReasonError && (
+              <p className="text-sm text-destructive font-medium" role="alert">
+                Please explain why the collection was rejected.
+              </p>
+            )}
+            <textarea
+              id="rejection-reason"
+              value={collectionRejectionReason}
+              onChange={(e) => {
+                setCollectionRejectionReason(e.target.value);
+                setRejectionReasonError(false);
+              }}
+              placeholder="Enter the reason for rejection..."
+              rows={4}
+              className={cn(
+                "w-full rounded-md border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-h-[120px]",
+                rejectionReasonError
+                  ? "border-destructive ring-1 ring-destructive/30"
+                  : "border-input"
+              )}
+            />
+          </div>
+        )}
       </Section>
       </div>
 
