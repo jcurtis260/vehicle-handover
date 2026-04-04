@@ -323,7 +323,15 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
   }
 
   return (
-    <div className="space-y-4 max-w-4xl mx-auto pb-28 lg:pb-0">
+    <div
+      className={cn(
+        "space-y-4 max-w-4xl mx-auto",
+        /* Clear fixed action bar: bottom-16 + nav + bar height (~5rem) + safe area */
+        collectionOutcome === "rejected"
+          ? "pb-[calc(10rem+env(safe-area-inset-bottom))] sm:pb-[calc(12rem+env(safe-area-inset-bottom))] lg:pb-40"
+          : "pb-[calc(8.5rem+env(safe-area-inset-bottom))] lg:pb-32"
+      )}
+    >
       <Section title="Vehicle Details" defaultOpen={true}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
@@ -596,7 +604,10 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
           </button>
         </div>
         {collectionOutcome === "rejected" && (
-          <div ref={rejectionReasonRef} className="space-y-1.5 pt-2">
+          <div
+            ref={rejectionReasonRef}
+            className="space-y-1.5 pt-2 pb-1"
+          >
             <label className="text-sm font-medium" htmlFor="rejection-reason">
               Rejection reason *
             </label>
