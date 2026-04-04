@@ -18,6 +18,8 @@ async function runAutoMigrations() {
     await _sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_all_reports BOOLEAN NOT NULL DEFAULT false`;
     await _sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_edit_all_reports BOOLEAN NOT NULL DEFAULT false`;
     await _sql`ALTER TABLE handovers ADD COLUMN IF NOT EXISTS type VARCHAR(20) NOT NULL DEFAULT 'collection'`;
+    await _sql`ALTER TABLE handovers ADD COLUMN IF NOT EXISTS fuel_type VARCHAR(40)`;
+    await _sql`ALTER TABLE handovers ADD COLUMN IF NOT EXISTS collection_outcome VARCHAR(20)`;
     await _sql`
       CREATE TABLE IF NOT EXISTS vehicle_makes (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

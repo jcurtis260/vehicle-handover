@@ -125,6 +125,8 @@ export default async function EditHandoverPage({
           name: handover.name,
           mileage: handover.mileage,
           otherComments: handover.otherComments || "",
+          fuelType: handover.fuelType,
+          collectionOutcome: handover.collectionOutcome,
           checks: checksMap,
           tyres: tyresMap,
           photos,

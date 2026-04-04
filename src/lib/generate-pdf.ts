@@ -8,6 +8,7 @@ import {
 } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { CHECK_ITEM_LABELS, DELIVERY_CHECK_ITEM_LABELS, type CheckItemKey, type DeliveryCheckItemKey } from "@/lib/check-items";
+import { fuelTypeLabel, collectionOutcomeLabel } from "@/lib/fuel-types";
 import PDFDocument from "pdfkit";
 
 const BLACK = "#000000";
@@ -263,12 +264,6 @@ export async function generateHandoverPdf(
   doc.y += 22;
 
   // ── VEHICLE DETAILS ─────────────────────────────────────
-  const detailBoxH = 52;
-  const detailBoxY = doc.y;
-  doc
-    .roundedRect(LEFT, detailBoxY, WIDTH, detailBoxH, 4)
-    .fillAndStroke(LIGHT_BG, BORDER);
-
   const fields: [string, string][] = [
     ["Date", new Date(handover.date).toLocaleDateString("en-GB")],
     ["Inspector", handover.name],
@@ -276,19 +271,32 @@ export async function generateHandoverPdf(
     ["Vehicle", `${vehicle.make} ${vehicle.model}`],
     ["Registration", vehicle.registration],
   ];
+  if (!isDelivery) {
+    fields.push(
+      ["Fuel Type", fuelTypeLabel(handover.fuelType)],
+      ["Collection outcome", collectionOutcomeLabel(handover.collectionOutcome)]
+    );
+  }
 
   const colW = WIDTH / 3;
-  const row1Y = detailBoxY + 6;
-  const row2Y = row1Y + 24;
+  const rowPitch = 24;
+  const rows = Math.ceil(fields.length / 3);
+  const detailBoxH = 6 + rows * rowPitch + 8;
+  const detailBoxY = doc.y;
+  doc
+    .roundedRect(LEFT, detailBoxY, WIDTH, detailBoxH, 4)
+    .fillAndStroke(LIGHT_BG, BORDER);
 
+  const row0Y = detailBoxY + 6;
   fields.forEach(([label, value], i) => {
-    const row = i < 3 ? row1Y : row2Y;
-    const col = i < 3 ? i : i - 3;
+    const row = Math.floor(i / 3);
+    const col = i % 3;
+    const y = row0Y + row * rowPitch;
     const x = LEFT + 10 + col * colW;
     doc.fontSize(6.5).font("Helvetica").fillColor(GRAY)
-      .text(label.toUpperCase(), x, row, { lineBreak: false });
+      .text(label.toUpperCase(), x, y, { lineBreak: false });
     doc.fontSize(9.5).font("Helvetica-Bold").fillColor(DARK)
-      .text(value || "N/A", x, row + 9, { lineBreak: false });
+      .text(value || "N/A", x, y + 9, { lineBreak: false });
   });
 
   doc.y = detailBoxY + detailBoxH + 2;

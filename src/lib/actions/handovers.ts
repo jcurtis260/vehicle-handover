@@ -32,6 +32,12 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { touchUserLastLogin } from "@/lib/auth-helpers";
 import { revalidatePath } from "next/cache";
+import {
+  FUEL_TYPE_VALUES,
+  COLLECTION_OUTCOME_VALUES,
+  type FuelTypeValue,
+  type CollectionOutcomeValue,
+} from "@/lib/fuel-types";
 
 interface CheckInput {
   checkItem: string;
@@ -63,6 +69,10 @@ interface HandoverInput {
   otherComments: string;
   status: "draft" | "completed";
   type?: "collection" | "delivery";
+  /** Collection only */
+  fuelType?: string | null;
+  /** Collection only */
+  collectionOutcome?: string | null;
   checks: CheckInput[];
   tyres: TyreInput[];
   photos?: PhotoInput[];
@@ -100,6 +110,16 @@ function validateHandoverInput(input: HandoverInput) {
     throw new Error("Comments too long");
   if (input.mileage !== null && (typeof input.mileage !== "number" || input.mileage < 0))
     throw new Error("Invalid mileage");
+
+  const handoverType = input.type || "collection";
+  if (handoverType === "collection") {
+    const ft = input.fuelType?.trim();
+    if (ft && !FUEL_TYPE_VALUES.includes(ft as FuelTypeValue))
+      throw new Error("Invalid fuel type");
+    const co = input.collectionOutcome?.trim();
+    if (co && !COLLECTION_OUTCOME_VALUES.includes(co as CollectionOutcomeValue))
+      throw new Error("Invalid collection outcome");
+  }
 
   for (const t of input.tyres) {
     if (!VALID_TYRE_POSITIONS.includes(t.position))
@@ -169,6 +189,7 @@ export async function createHandover(input: HandoverInput) {
     })
     .returning();
 
+  const handoverType = input.type || "collection";
   const [handover] = await db
     .insert(handovers)
     .values({
@@ -179,7 +200,15 @@ export async function createHandover(input: HandoverInput) {
       mileage: input.mileage,
       otherComments: input.otherComments || null,
       status: input.status,
-      type: input.type || "collection",
+      type: handoverType,
+      fuelType:
+        handoverType === "collection"
+          ? input.fuelType?.trim() || null
+          : null,
+      collectionOutcome:
+        handoverType === "collection"
+          ? input.collectionOutcome?.trim() || null
+          : null,
     })
     .returning();
 
@@ -272,6 +301,7 @@ export async function updateHandover(
     })
     .where(eq(vehicles.id, existing.vehicleId));
 
+  const handoverType = input.type || existing.type || "collection";
   await db
     .update(handovers)
     .set({
@@ -280,7 +310,13 @@ export async function updateHandover(
       mileage: input.mileage,
       otherComments: input.otherComments || null,
       status: input.status,
-      type: input.type || existing.type || "collection",
+      type: handoverType,
+      ...(handoverType === "collection"
+        ? {
+            fuelType: input.fuelType?.trim() || null,
+            collectionOutcome: input.collectionOutcome?.trim() || null,
+          }
+        : {}),
       updatedAt: new Date(),
     })
     .where(eq(handovers.id, handoverId));

@@ -20,6 +20,12 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  FUEL_TYPE_VALUES,
+  FUEL_TYPE_LABELS,
+  type FuelTypeValue,
+  type CollectionOutcomeValue,
+} from "@/lib/fuel-types";
 
 interface CheckState {
   checked: boolean;
@@ -61,6 +67,8 @@ interface HandoverFormProps {
     name: string;
     mileage: number | null;
     otherComments: string;
+    fuelType?: string | null;
+    collectionOutcome?: string | null;
     checks: Record<string, CheckState>;
     tyres: Record<string, TyreState>;
     photos: PhotoItem[];
@@ -129,6 +137,13 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
   const [otherComments, setOtherComments] = useState(
     initialData?.otherComments || ""
   );
+  const [fuelType, setFuelType] = useState(initialData?.fuelType || "");
+  const [collectionOutcome, setCollectionOutcome] = useState<
+    CollectionOutcomeValue | null
+  >(() => {
+    const o = initialData?.collectionOutcome;
+    return o === "accepted" || o === "rejected" ? o : null;
+  });
 
   const [checks, setChecks] = useState<Record<string, CheckState>>(() => {
     if (initialData?.checks) return initialData.checks;
@@ -230,6 +245,8 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
         name,
         mileage: mileage ? parseInt(mileage) : null,
         otherComments,
+        fuelType: fuelType.trim() || null,
+        collectionOutcome,
         status,
         type: "collection" as const,
         checks: CHECK_ITEMS.map((key) => ({
@@ -339,6 +356,21 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
               />
             </div>
           )}
+          <div className="space-y-1.5 sm:col-span-2">
+            <label className="text-sm font-medium">Fuel Type</label>
+            <select
+              value={fuelType}
+              onChange={(e) => setFuelType(e.target.value)}
+              className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground min-h-[44px]"
+            >
+              <option value="">Select fuel type</option>
+              {FUEL_TYPE_VALUES.map((v) => (
+                <option key={v} value={v}>
+                  {FUEL_TYPE_LABELS[v as FuelTypeValue]}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Registration</label>
             <Input
@@ -474,6 +506,38 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
           rows={4}
           className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
+      </Section>
+
+      <Section title="Collection outcome" defaultOpen={true}>
+        <p className="text-sm text-muted-foreground">
+          Was this vehicle collection accepted or rejected?
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+          <button
+            type="button"
+            onClick={() => setCollectionOutcome("accepted")}
+            className={cn(
+              "min-h-[48px] rounded-lg border-2 px-4 py-3 text-sm font-semibold transition-colors text-left",
+              collectionOutcome === "accepted"
+                ? "border-primary bg-primary/10"
+                : "border-border bg-card hover:bg-muted/50"
+            )}
+          >
+            Accepted
+          </button>
+          <button
+            type="button"
+            onClick={() => setCollectionOutcome("rejected")}
+            className={cn(
+              "min-h-[48px] rounded-lg border-2 px-4 py-3 text-sm font-semibold transition-colors text-left",
+              collectionOutcome === "rejected"
+                ? "border-destructive bg-destructive/10"
+                : "border-border bg-card hover:bg-muted/50"
+            )}
+          >
+            Rejected
+          </button>
+        </div>
       </Section>
 
       <div className="fixed bottom-16 lg:bottom-0 left-0 right-0 lg:left-64 z-40 border-t border-border bg-card p-3 safe-bottom">

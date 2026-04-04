@@ -19,6 +19,7 @@ import {
   XCircle,
   ArrowLeft,
 } from "lucide-react";
+import { fuelTypeLabel, collectionOutcomeLabel } from "@/lib/fuel-types";
 
 export default async function HandoverReviewPage({
   params,
@@ -126,6 +127,12 @@ export default async function HandoverReviewPage({
               <dt className="text-muted-foreground">Model</dt>
               <dd className="font-medium">{handover.vehicle.model}</dd>
             </div>
+            {!isDelivery && (
+              <div>
+                <dt className="text-muted-foreground">Fuel type</dt>
+                <dd className="font-medium">{fuelTypeLabel(handover.fuelType)}</dd>
+              </div>
+            )}
             <div>
               <dt className="text-muted-foreground">Registration</dt>
               <dd className="font-medium">{handover.vehicle.registration}</dd>
@@ -136,6 +143,14 @@ export default async function HandoverReviewPage({
                 {handover.mileage?.toLocaleString() || "N/A"}
               </dd>
             </div>
+            {!isDelivery && (
+              <div className="col-span-2 sm:col-span-1">
+                <dt className="text-muted-foreground">Collection outcome</dt>
+                <dd className="font-medium">
+                  {collectionOutcomeLabel(handover.collectionOutcome)}
+                </dd>
+              </div>
+            )}
           </dl>
         </CardContent>
       </Card>
