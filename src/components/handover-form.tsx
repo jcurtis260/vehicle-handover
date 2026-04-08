@@ -226,30 +226,31 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
       return;
     }
 
-    if (!collectionOutcome) {
-      setCollectionOutcomeError(true);
-      alert("Please select whether the collection was accepted or rejected.");
-      setTimeout(() => {
-        collectionOutcomeSectionRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-      }, 100);
-      return;
+    if (status === "completed") {
+      if (!collectionOutcome) {
+        setCollectionOutcomeError(true);
+        alert("Please select whether the collection was accepted or rejected to complete the handover.");
+        setTimeout(() => {
+          collectionOutcomeSectionRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }, 100);
+        return;
+      }
+      if (collectionOutcome === "rejected" && !collectionRejectionReason.trim()) {
+        setRejectionReasonError(true);
+        alert("Please enter a rejection reason.");
+        setTimeout(() => {
+          rejectionReasonRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }, 100);
+        return;
+      }
     }
     setCollectionOutcomeError(false);
-
-    if (collectionOutcome === "rejected" && !collectionRejectionReason.trim()) {
-      setRejectionReasonError(true);
-      alert("Please enter a rejection reason.");
-      setTimeout(() => {
-        rejectionReasonRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-      }, 100);
-      return;
-    }
     setRejectionReasonError(false);
 
     setTyreError("");
@@ -280,10 +281,10 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
         mileage: mileage ? parseInt(mileage) : null,
         otherComments,
         fuelType: fuelType.trim() || null,
-        collectionOutcome,
+        collectionOutcome: collectionOutcome ?? null,
         collectionRejectionReason:
           collectionOutcome === "rejected"
-            ? collectionRejectionReason.trim()
+            ? collectionRejectionReason.trim() || null
             : null,
         status,
         type: "collection" as const,
@@ -555,9 +556,10 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
       </Section>
 
       <div ref={collectionOutcomeSectionRef}>
-      <Section title="Collection outcome *" defaultOpen={true}>
+      <Section title="Collection outcome" defaultOpen={true}>
         <p className="text-sm text-muted-foreground">
-          Was this vehicle collection accepted or rejected?
+          Was this vehicle collection accepted or rejected? Required to complete the
+          handover; drafts can be saved without a selection.
         </p>
         {collectionOutcomeError && (
           <p className="text-sm text-destructive font-medium" role="alert">
@@ -609,8 +611,11 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
             className="space-y-1.5 pt-2 pb-1"
           >
             <label className="text-sm font-medium" htmlFor="rejection-reason">
-              Rejection reason *
+              Rejection reason
             </label>
+            <p className="text-xs text-muted-foreground">
+              Required to complete the handover when rejected; optional on drafts.
+            </p>
             {rejectionReasonError && (
               <p className="text-sm text-destructive font-medium" role="alert">
                 Please explain why the collection was rejected.

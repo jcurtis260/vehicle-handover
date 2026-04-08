@@ -119,12 +119,17 @@ function validateHandoverInput(input: HandoverInput) {
     if (ft && !FUEL_TYPE_VALUES.includes(ft as FuelTypeValue))
       throw new Error("Invalid fuel type");
     const co = input.collectionOutcome?.trim();
-    if (!co || !COLLECTION_OUTCOME_VALUES.includes(co as CollectionOutcomeValue))
-      throw new Error("Collection outcome is required");
-    if (co === "rejected") {
-      const rr = input.collectionRejectionReason?.trim();
-      if (!rr) throw new Error("Rejection reason is required when collection is rejected");
-      if (rr.length > MAX_COMMENTS) throw new Error("Rejection reason too long");
+    if (co) {
+      if (!COLLECTION_OUTCOME_VALUES.includes(co as CollectionOutcomeValue))
+        throw new Error("Invalid collection outcome");
+      if (co === "rejected") {
+        const rr = input.collectionRejectionReason?.trim();
+        if (rr && rr.length > MAX_COMMENTS) throw new Error("Rejection reason too long");
+        if (input.status === "completed" && !rr)
+          throw new Error("Rejection reason is required when collection is rejected");
+      }
+    } else if (input.status === "completed") {
+      throw new Error("Collection outcome is required to complete a collection handover");
     }
   }
 
