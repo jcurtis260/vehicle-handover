@@ -75,6 +75,14 @@ interface HandoverInput {
   collectionOutcome?: string | null;
   /** Collection only; required when collectionOutcome is rejected */
   collectionRejectionReason?: string | null;
+  /** Collection only: motorway | carwow | other */
+  purchaseSource?: string | null;
+  /** Collection only: required when purchaseSource is other */
+  purchaseSourceOther?: string | null;
+  /** Collection only: stored in pence */
+  plannedPurchasePricePence?: number | null;
+  /** Collection only: stored in pence */
+  actualPurchasePricePence?: number | null;
   checks: CheckInput[];
   tyres: TyreInput[];
   photos?: PhotoInput[];
@@ -86,6 +94,7 @@ const VALID_CATEGORIES = [
   "exterior", "interior", "damage", "tyres", "other", "v5", "signature",
 ] as const;
 const VALID_TYRE_POSITIONS = ["NSF", "NSR", "OSR", "OSF"] as const;
+const VALID_PURCHASE_SOURCES = ["motorway", "carwow", "other"] as const;
 const MAX_STRING = 255;
 const MAX_COMMENTS = 2000;
 
@@ -130,6 +139,54 @@ function validateHandoverInput(input: HandoverInput) {
       }
     } else if (input.status === "completed") {
       throw new Error("Collection outcome is required to complete a collection handover");
+    }
+
+    const purchaseSource = input.purchaseSource?.trim();
+    if (purchaseSource) {
+      if (
+        !VALID_PURCHASE_SOURCES.includes(
+          purchaseSource as (typeof VALID_PURCHASE_SOURCES)[number]
+        )
+      ) {
+        throw new Error("Invalid purchase source");
+      }
+    } else if (input.status === "completed") {
+      throw new Error("Purchase source is required to complete a collection handover");
+    }
+
+    const purchaseSourceOther = input.purchaseSourceOther?.trim();
+    if (purchaseSource === "other") {
+      if (!purchaseSourceOther && input.status === "completed") {
+        throw new Error("Purchase source details are required when source is Other");
+      }
+      if (purchaseSourceOther && purchaseSourceOther.length > MAX_STRING) {
+        throw new Error("Purchase source details too long");
+      }
+    }
+
+    const plannedPrice = input.plannedPurchasePricePence;
+    const actualPrice = input.actualPurchasePricePence;
+    if (plannedPrice !== undefined && plannedPrice !== null) {
+      if (
+        !Number.isInteger(plannedPrice) ||
+        plannedPrice < 0 ||
+        plannedPrice > Number.MAX_SAFE_INTEGER
+      ) {
+        throw new Error("Invalid planned purchase price");
+      }
+    } else if (input.status === "completed") {
+      throw new Error("Planned purchase price is required to complete a collection handover");
+    }
+    if (actualPrice !== undefined && actualPrice !== null) {
+      if (
+        !Number.isInteger(actualPrice) ||
+        actualPrice < 0 ||
+        actualPrice > Number.MAX_SAFE_INTEGER
+      ) {
+        throw new Error("Invalid actual purchase price");
+      }
+    } else if (input.status === "completed") {
+      throw new Error("Actual purchase price is required to complete a collection handover");
     }
   }
 
@@ -225,6 +282,20 @@ export async function createHandover(input: HandoverInput) {
         handoverType === "collection" &&
         input.collectionOutcome?.trim() === "rejected"
           ? input.collectionRejectionReason?.trim() || null
+          : null,
+      purchaseSource:
+        handoverType === "collection" ? input.purchaseSource?.trim() || null : null,
+      purchaseSourceOther:
+        handoverType === "collection" && input.purchaseSource?.trim() === "other"
+          ? input.purchaseSourceOther?.trim() || null
+          : null,
+      plannedPurchasePricePence:
+        handoverType === "collection"
+          ? input.plannedPurchasePricePence ?? null
+          : null,
+      actualPurchasePricePence:
+        handoverType === "collection"
+          ? input.actualPurchasePricePence ?? null
           : null,
     })
     .returning();
@@ -336,6 +407,13 @@ export async function updateHandover(
               input.collectionOutcome?.trim() === "rejected"
                 ? input.collectionRejectionReason?.trim() || null
                 : null,
+            purchaseSource: input.purchaseSource?.trim() || null,
+            purchaseSourceOther:
+              input.purchaseSource?.trim() === "other"
+                ? input.purchaseSourceOther?.trim() || null
+                : null,
+            plannedPurchasePricePence: input.plannedPurchasePricePence ?? null,
+            actualPurchasePricePence: input.actualPurchasePricePence ?? null,
           }
         : {}),
       updatedAt: new Date(),

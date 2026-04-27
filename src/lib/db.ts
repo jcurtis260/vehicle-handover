@@ -22,6 +22,10 @@ async function runAutoMigrations() {
     await _sql`ALTER TABLE handovers ADD COLUMN IF NOT EXISTS collection_outcome VARCHAR(20)`;
     await _sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS ui_preferences JSONB`;
     await _sql`ALTER TABLE handovers ADD COLUMN IF NOT EXISTS collection_rejection_reason TEXT`;
+    await _sql`ALTER TABLE handovers ADD COLUMN IF NOT EXISTS purchase_source VARCHAR(20)`;
+    await _sql`ALTER TABLE handovers ADD COLUMN IF NOT EXISTS purchase_source_other VARCHAR(255)`;
+    await _sql`ALTER TABLE handovers ADD COLUMN IF NOT EXISTS planned_purchase_price_pence INTEGER`;
+    await _sql`ALTER TABLE handovers ADD COLUMN IF NOT EXISTS actual_purchase_price_pence INTEGER`;
     await _sql`
       CREATE TABLE IF NOT EXISTS vehicle_makes (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

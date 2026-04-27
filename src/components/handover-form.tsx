@@ -70,6 +70,10 @@ interface HandoverFormProps {
     fuelType?: string | null;
     collectionOutcome?: string | null;
     collectionRejectionReason?: string | null;
+    purchaseSource?: string | null;
+    purchaseSourceOther?: string | null;
+    plannedPurchasePricePence?: number | null;
+    actualPurchasePricePence?: number | null;
     checks: Record<string, CheckState>;
     tyres: Record<string, TyreState>;
     photos: PhotoItem[];
@@ -77,6 +81,24 @@ interface HandoverFormProps {
 }
 
 const TYRE_POSITIONS = ["NSF", "NSR", "OSR", "OSF"] as const;
+const PURCHASE_SOURCE_OPTIONS = [
+  { value: "motorway", label: "Motorway" },
+  { value: "carwow", label: "Carwow" },
+  { value: "other", label: "Other" },
+] as const;
+
+function formatPenceToPounds(pence: number | null | undefined): string {
+  if (pence === null || pence === undefined || !Number.isFinite(pence)) return "";
+  return (pence / 100).toFixed(2);
+}
+
+function parsePoundsToPence(value: string): number | null {
+  const cleaned = value.trim();
+  if (!cleaned) return null;
+  const num = Number.parseFloat(cleaned);
+  if (!Number.isFinite(num) || num < 0) return null;
+  return Math.round(num * 100);
+}
 
 function Section({
   title,
@@ -139,6 +161,16 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
     initialData?.otherComments || ""
   );
   const [fuelType, setFuelType] = useState(initialData?.fuelType || "");
+  const [purchaseSource, setPurchaseSource] = useState(initialData?.purchaseSource || "");
+  const [purchaseSourceOther, setPurchaseSourceOther] = useState(
+    initialData?.purchaseSourceOther || ""
+  );
+  const [plannedPurchasePrice, setPlannedPurchasePrice] = useState(
+    formatPenceToPounds(initialData?.plannedPurchasePricePence)
+  );
+  const [actualPurchasePrice, setActualPurchasePrice] = useState(
+    formatPenceToPounds(initialData?.actualPurchasePricePence)
+  );
   const [collectionOutcome, setCollectionOutcome] = useState<
     CollectionOutcomeValue | null
   >(() => {
@@ -171,14 +203,40 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
   const tyresSectionRef = useRef<HTMLDivElement>(null);
   const [collectionOutcomeError, setCollectionOutcomeError] = useState(false);
   const [rejectionReasonError, setRejectionReasonError] = useState(false);
+  const [purchaseSourceError, setPurchaseSourceError] = useState(false);
+  const [purchaseSourceOtherError, setPurchaseSourceOtherError] = useState(false);
+  const [purchasePriceError, setPurchasePriceError] = useState(false);
   const collectionOutcomeSectionRef = useRef<HTMLDivElement>(null);
   const rejectionReasonRef = useRef<HTMLDivElement>(null);
+  const purchaseDetailsRef = useRef<HTMLDivElement>(null);
 
   const [photos, setPhotos] = useState<PhotoItem[]>(initialData?.photos || []);
   const [catalogMakes, setCatalogMakes] = useState<CatalogMake[]>([]);
 
   const selectedMake = catalogMakes.find((m) => m.name === make);
   const modelsForSelectedMake = selectedMake?.models ?? [];
+  const plannedPurchasePricePence = parsePoundsToPence(plannedPurchasePrice);
+  const actualPurchasePricePence = parsePoundsToPence(actualPurchasePrice);
+  const purchaseDifferencePence =
+    plannedPurchasePricePence !== null && actualPurchasePricePence !== null
+      ? actualPurchasePricePence - plannedPurchasePricePence
+      : null;
+  const purchaseDifferenceDisplay =
+    purchaseDifferencePence === null
+      ? "Enter both amounts to calculate"
+      : purchaseDifferencePence < 0
+        ? `Saved £${(Math.abs(purchaseDifferencePence) / 100).toFixed(2)}`
+        : purchaseDifferencePence > 0
+          ? `Over by £${(purchaseDifferencePence / 100).toFixed(2)}`
+          : "On budget";
+  const purchaseDifferenceClassName =
+    purchaseDifferencePence === null
+      ? "text-base font-semibold"
+      : purchaseDifferencePence < 0
+        ? "text-base font-semibold text-success"
+        : purchaseDifferencePence > 0
+          ? "text-base font-semibold text-destructive"
+          : "text-base font-semibold";
 
   useEffect(() => {
     let alive = true;
@@ -227,6 +285,30 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
     }
 
     if (status === "completed") {
+      if (!purchaseSource) {
+        setPurchaseSourceError(true);
+        alert("Please select who we bought the car from.");
+        setTimeout(() => {
+          purchaseDetailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 100);
+        return;
+      }
+      if (purchaseSource === "other" && !purchaseSourceOther.trim()) {
+        setPurchaseSourceOtherError(true);
+        alert("Please enter where the car was bought from.");
+        setTimeout(() => {
+          purchaseDetailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 100);
+        return;
+      }
+      if (plannedPurchasePricePence === null || actualPurchasePricePence === null) {
+        setPurchasePriceError(true);
+        alert("Please enter both planned and actual purchase prices.");
+        setTimeout(() => {
+          purchaseDetailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 100);
+        return;
+      }
       if (!collectionOutcome) {
         setCollectionOutcomeError(true);
         alert("Please select whether the collection was accepted or rejected to complete the handover.");
@@ -250,6 +332,9 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
         return;
       }
     }
+    setPurchaseSourceError(false);
+    setPurchaseSourceOtherError(false);
+    setPurchasePriceError(false);
     setCollectionOutcomeError(false);
     setRejectionReasonError(false);
 
@@ -281,6 +366,11 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
         mileage: mileage ? parseInt(mileage) : null,
         otherComments,
         fuelType: fuelType.trim() || null,
+        purchaseSource: purchaseSource.trim() || null,
+        purchaseSourceOther:
+          purchaseSource.trim() === "other" ? purchaseSourceOther.trim() || null : null,
+        plannedPurchasePricePence,
+        actualPurchasePricePence,
         collectionOutcome: collectionOutcome ?? null,
         collectionRejectionReason:
           collectionOutcome === "rejected"
@@ -417,6 +507,94 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
                 </option>
               ))}
             </select>
+          </div>
+          <div ref={purchaseDetailsRef} className="space-y-4 sm:col-span-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Who did we buy the car from?</label>
+              <select
+                value={purchaseSource}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setPurchaseSource(next);
+                  setPurchaseSourceError(false);
+                  if (next !== "other") {
+                    setPurchaseSourceOther("");
+                    setPurchaseSourceOtherError(false);
+                  }
+                }}
+                className={cn(
+                  "flex h-10 w-full rounded-md border bg-card px-3 py-2 text-sm text-foreground min-h-[44px]",
+                  purchaseSourceError ? "border-destructive ring-1 ring-destructive/30" : "border-input"
+                )}
+              >
+                <option value="">Select source</option>
+                {PURCHASE_SOURCE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {purchaseSource === "other" && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Where from?</label>
+                <Input
+                  value={purchaseSourceOther}
+                  onChange={(e) => {
+                    setPurchaseSourceOther(e.target.value);
+                    setPurchaseSourceOtherError(false);
+                  }}
+                  placeholder="Enter where we bought it from"
+                  className={cn(
+                    purchaseSourceOtherError && "border-destructive ring-1 ring-destructive/30"
+                  )}
+                />
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">How much were we going to pay?</label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={plannedPurchasePrice}
+                  onChange={(e) => {
+                    setPlannedPurchasePrice(e.target.value);
+                    setPurchasePriceError(false);
+                  }}
+                  placeholder="0.00"
+                  className={cn(
+                    purchasePriceError && "border-destructive ring-1 ring-destructive/30"
+                  )}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">How much did we pay?</label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={actualPurchasePrice}
+                  onChange={(e) => {
+                    setActualPurchasePrice(e.target.value);
+                    setPurchasePriceError(false);
+                  }}
+                  placeholder="0.00"
+                  className={cn(
+                    purchasePriceError && "border-destructive ring-1 ring-destructive/30"
+                  )}
+                />
+              </div>
+            </div>
+            <div className="rounded-lg border border-border bg-muted/40 p-3">
+              <p className="text-xs text-muted-foreground">Difference (Paid - Planned)</p>
+              <p className={purchaseDifferenceClassName}>
+                {purchaseDifferenceDisplay}
+              </p>
+            </div>
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Registration</label>
