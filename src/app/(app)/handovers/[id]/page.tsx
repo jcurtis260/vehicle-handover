@@ -53,27 +53,6 @@ export default async function HandoverReviewPage({
         return "N/A";
     }
   })();
-  const priceDifferencePence =
-    handover.plannedPurchasePricePence !== null &&
-    handover.actualPurchasePricePence !== null
-      ? handover.actualPurchasePricePence - handover.plannedPurchasePricePence
-      : null;
-  const priceDifferenceDisplay =
-    priceDifferencePence === null
-      ? "N/A"
-      : priceDifferencePence < 0
-        ? `Saved £${(Math.abs(priceDifferencePence) / 100).toFixed(2)}`
-        : priceDifferencePence > 0
-          ? `Over by £${(priceDifferencePence / 100).toFixed(2)}`
-          : "On budget";
-  const priceDifferenceClassName =
-    priceDifferencePence === null
-      ? "font-medium"
-      : priceDifferencePence < 0
-        ? "font-medium text-success"
-        : priceDifferencePence > 0
-          ? "font-medium text-destructive"
-          : "font-medium";
 
   const checksMap = new Map(
     handover.checks.map((c) => [c.checkItem, c])
@@ -194,34 +173,6 @@ export default async function HandoverReviewPage({
               <div>
                 <dt className="text-muted-foreground">Where from</dt>
                 <dd className="font-medium">{handover.purchaseSourceOther?.trim() || "N/A"}</dd>
-              </div>
-            )}
-            {!isDelivery && (
-              <div>
-                <dt className="text-muted-foreground">Planned price</dt>
-                <dd className="font-medium">
-                  {handover.plannedPurchasePricePence !== null
-                    ? `£${(handover.plannedPurchasePricePence / 100).toFixed(2)}`
-                    : "N/A"}
-                </dd>
-              </div>
-            )}
-            {!isDelivery && (
-              <div>
-                <dt className="text-muted-foreground">Actual price</dt>
-                <dd className="font-medium">
-                  {handover.actualPurchasePricePence !== null
-                    ? `£${(handover.actualPurchasePricePence / 100).toFixed(2)}`
-                    : "N/A"}
-                </dd>
-              </div>
-            )}
-            {!isDelivery && (
-              <div className="col-span-2 sm:col-span-1">
-                <dt className="text-muted-foreground">Difference (Paid - Planned)</dt>
-                <dd className={priceDifferenceClassName}>
-                  {priceDifferenceDisplay}
-                </dd>
               </div>
             )}
             {!isDelivery &&

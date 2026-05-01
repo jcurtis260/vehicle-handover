@@ -99,10 +99,6 @@ export const handovers = pgTable("handovers", {
   purchaseSource: varchar("purchase_source", { length: 20 }),
   /** Free text when purchaseSource is "other" */
   purchaseSourceOther: varchar("purchase_source_other", { length: 255 }),
-  /** Planned purchase price in pence */
-  plannedPurchasePricePence: integer("planned_purchase_price_pence"),
-  /** Actual purchase price in pence */
-  actualPurchasePricePence: integer("actual_purchase_price_pence"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

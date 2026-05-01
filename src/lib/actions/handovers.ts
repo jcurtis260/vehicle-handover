@@ -79,10 +79,6 @@ interface HandoverInput {
   purchaseSource?: string | null;
   /** Collection only: required when purchaseSource is other */
   purchaseSourceOther?: string | null;
-  /** Collection only: stored in pence */
-  plannedPurchasePricePence?: number | null;
-  /** Collection only: stored in pence */
-  actualPurchasePricePence?: number | null;
   checks: CheckInput[];
   tyres: TyreInput[];
   photos?: PhotoInput[];
@@ -164,30 +160,6 @@ function validateHandoverInput(input: HandoverInput) {
       }
     }
 
-    const plannedPrice = input.plannedPurchasePricePence;
-    const actualPrice = input.actualPurchasePricePence;
-    if (plannedPrice !== undefined && plannedPrice !== null) {
-      if (
-        !Number.isInteger(plannedPrice) ||
-        plannedPrice < 0 ||
-        plannedPrice > Number.MAX_SAFE_INTEGER
-      ) {
-        throw new Error("Invalid planned purchase price");
-      }
-    } else if (input.status === "completed") {
-      throw new Error("Planned purchase price is required to complete a collection handover");
-    }
-    if (actualPrice !== undefined && actualPrice !== null) {
-      if (
-        !Number.isInteger(actualPrice) ||
-        actualPrice < 0 ||
-        actualPrice > Number.MAX_SAFE_INTEGER
-      ) {
-        throw new Error("Invalid actual purchase price");
-      }
-    } else if (input.status === "completed") {
-      throw new Error("Actual purchase price is required to complete a collection handover");
-    }
   }
 
   for (const t of input.tyres) {
@@ -288,14 +260,6 @@ export async function createHandover(input: HandoverInput) {
       purchaseSourceOther:
         handoverType === "collection" && input.purchaseSource?.trim() === "other"
           ? input.purchaseSourceOther?.trim() || null
-          : null,
-      plannedPurchasePricePence:
-        handoverType === "collection"
-          ? input.plannedPurchasePricePence ?? null
-          : null,
-      actualPurchasePricePence:
-        handoverType === "collection"
-          ? input.actualPurchasePricePence ?? null
           : null,
     })
     .returning();
@@ -412,8 +376,6 @@ export async function updateHandover(
               input.purchaseSource?.trim() === "other"
                 ? input.purchaseSourceOther?.trim() || null
                 : null,
-            plannedPurchasePricePence: input.plannedPurchasePricePence ?? null,
-            actualPurchasePricePence: input.actualPurchasePricePence ?? null,
           }
         : {}),
       updatedAt: new Date(),

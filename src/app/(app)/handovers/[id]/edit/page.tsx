@@ -130,8 +130,6 @@ export default async function EditHandoverPage({
           collectionRejectionReason: handover.collectionRejectionReason,
           purchaseSource: handover.purchaseSource,
           purchaseSourceOther: handover.purchaseSourceOther,
-          plannedPurchasePricePence: handover.plannedPurchasePricePence,
-          actualPurchasePricePence: handover.actualPurchasePricePence,
           checks: checksMap,
           tyres: tyresMap,
           photos,

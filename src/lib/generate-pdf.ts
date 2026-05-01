@@ -280,43 +280,11 @@ export async function generateHandoverPdf(
           : handover.purchaseSource === "other"
             ? "Other"
             : "N/A";
-    const hasPrices =
-      handover.plannedPurchasePricePence !== null &&
-      handover.actualPurchasePricePence !== null;
-    const priceDifferencePence =
-      handover.plannedPurchasePricePence !== null &&
-      handover.actualPurchasePricePence !== null
-        ? handover.actualPurchasePricePence - handover.plannedPurchasePricePence
-        : null;
-    const priceDifferenceLabel =
-      priceDifferencePence === null
-        ? "N/A"
-        : priceDifferencePence < 0
-          ? `Saved £${(Math.abs(priceDifferencePence) / 100).toFixed(2)}`
-          : priceDifferencePence > 0
-            ? `Over by £${(priceDifferencePence / 100).toFixed(2)}`
-            : "On budget";
     fields.push(
       ["Fuel Type", fuelTypeLabel(handover.fuelType)],
       ["Collection outcome", collectionOutcomeLabel(handover.collectionOutcome)],
       ["Bought from", purchaseSourceLabel],
-      ["Where from", handover.purchaseSource === "other" ? handover.purchaseSourceOther || "N/A" : "N/A"],
-      [
-        "Planned price",
-        handover.plannedPurchasePricePence !== null
-          ? `£${(handover.plannedPurchasePricePence / 100).toFixed(2)}`
-          : "N/A",
-      ],
-      [
-        "Actual price",
-        handover.actualPurchasePricePence !== null
-          ? `£${(handover.actualPurchasePricePence / 100).toFixed(2)}`
-          : "N/A",
-      ],
-      [
-        "Difference (Paid - Planned)",
-        priceDifferenceLabel,
-      ]
+      ["Where from", handover.purchaseSource === "other" ? handover.purchaseSourceOther || "N/A" : "N/A"]
     );
   }
 
