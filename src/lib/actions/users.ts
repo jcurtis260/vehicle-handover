@@ -2,11 +2,17 @@
 
 import { db } from "@/lib/db";
 import { users, handovers, vehicles, handoverPhotos } from "@/lib/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { hash } from "bcryptjs";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+
+function isUndefinedColumnError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const maybeCode = (error as { code?: unknown }).code;
+  return maybeCode === "42703";
+}
 
 export async function listUsers() {
   const session = await getServerSession(authOptions);
@@ -14,22 +20,45 @@ export async function listUsers() {
     throw new Error("Forbidden");
   }
 
-  return db
-    .select({
-      id: users.id,
-      email: users.email,
-      name: users.name,
-      role: users.role,
-      canEdit: users.canEdit,
-      canDelete: users.canDelete,
-      canViewChangelog: users.canViewChangelog,
-      canViewAllReports: users.canViewAllReports,
-      canEditAllReports: users.canEditAllReports,
-      lastLoginAt: users.lastLoginAt,
-      createdAt: users.createdAt,
-    })
-    .from(users)
-    .orderBy(users.createdAt);
+  try {
+    return await db
+      .select({
+        id: users.id,
+        email: users.email,
+        name: users.name,
+        role: users.role,
+        canEdit: users.canEdit,
+        canDelete: users.canDelete,
+        canViewChangelog: users.canViewChangelog,
+        canViewAllReports: users.canViewAllReports,
+        canEditAllReports: users.canEditAllReports,
+        lastLoginAt: users.lastLoginAt,
+        createdAt: users.createdAt,
+      })
+      .from(users)
+      .orderBy(users.createdAt);
+  } catch (error) {
+    if (!isUndefinedColumnError(error)) throw error;
+
+    // Backward-compatible fallback for deployments where new permission columns
+    // have not been applied yet. This keeps Settings usable instead of crashing.
+    return db
+      .select({
+        id: users.id,
+        email: users.email,
+        name: users.name,
+        role: users.role,
+        canEdit: sql<boolean>`false`,
+        canDelete: sql<boolean>`false`,
+        canViewChangelog: sql<boolean>`false`,
+        canViewAllReports: sql<boolean>`false`,
+        canEditAllReports: sql<boolean>`false`,
+        lastLoginAt: sql<Date | null>`NULL`,
+        createdAt: sql<Date>`NOW()`,
+      })
+      .from(users)
+      .orderBy(users.name);
+  }
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
