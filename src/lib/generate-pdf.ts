@@ -558,20 +558,37 @@ export async function generateHandoverPdf(
       } else if (typeof response.valueJson === "string") {
         rendered = response.valueJson.trim() || "N/A";
       }
-      ensureSpace(doc, 24);
+
+      const label = response.questionLabel.toUpperCase();
+      const labelWidth = WIDTH;
+      const valueWidth = WIDTH;
+      const labelGap = 2;
+      const rowGap = 8;
+
+      doc.fontSize(8).font("Helvetica");
+      const labelHeight = doc.heightOfString(label, { width: labelWidth });
+      doc.fontSize(10).font("Helvetica-Bold");
+      const valueHeight = doc.heightOfString(rendered, { width: valueWidth });
+      const rowHeight = labelHeight + labelGap + valueHeight + rowGap;
+
+      ensureSpace(doc, rowHeight);
+      const rowY = doc.y;
+
       doc
         .fontSize(8)
         .font("Helvetica")
         .fillColor(GRAY)
-        .text(response.questionLabel.toUpperCase(), LEFT, doc.y, {
-          lineBreak: false,
+        .text(label, LEFT, rowY, {
+          width: labelWidth,
         });
       doc
         .fontSize(10)
         .font("Helvetica-Bold")
         .fillColor(DARK)
-        .text(rendered, LEFT, doc.y + 3);
-      doc.y += 4;
+        .text(rendered, LEFT, rowY + labelHeight + labelGap, {
+          width: valueWidth,
+        });
+      doc.y = rowY + rowHeight;
     }
   }
 
