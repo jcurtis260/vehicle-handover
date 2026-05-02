@@ -8,6 +8,9 @@ import {
   vehicles,
   handoverPhotos,
   users,
+  formTemplates,
+  formTemplateQuestions,
+  handoverFormResponses,
 } from "@/lib/schema";
 import {
   eq,
@@ -38,6 +41,10 @@ import {
   type FuelTypeValue,
   type CollectionOutcomeValue,
 } from "@/lib/fuel-types";
+import type {
+  DynamicAnswerValue,
+  DynamicTemplateResponseInput,
+} from "@/lib/dynamic-forms";
 
 interface CheckInput {
   checkItem: string;
@@ -68,7 +75,7 @@ interface HandoverInput {
   mileage: number | null;
   otherComments: string;
   status: "draft" | "completed";
-  type?: "collection" | "delivery";
+  type?: "collection" | "delivery" | "dynamic";
   /** Collection only */
   fuelType?: string | null;
   /** Collection only */
@@ -79,13 +86,15 @@ interface HandoverInput {
   purchaseSource?: string | null;
   /** Collection only: required when purchaseSource is other */
   purchaseSourceOther?: string | null;
+  templateId?: string | null;
+  templateResponses?: DynamicTemplateResponseInput[];
   checks: CheckInput[];
   tyres: TyreInput[];
   photos?: PhotoInput[];
 }
 
 const VALID_STATUSES = ["draft", "completed"] as const;
-const VALID_TYPES = ["collection", "delivery"] as const;
+const VALID_TYPES = ["collection", "delivery", "dynamic"] as const;
 const VALID_CATEGORIES = [
   "exterior", "interior", "damage", "tyres", "other", "v5", "signature",
 ] as const;
@@ -186,6 +195,252 @@ function validateHandoverInput(input: HandoverInput) {
   }
 }
 
+function validateTemplateResponseValue(
+  questionType: string,
+  value: DynamicAnswerValue,
+  requiredForCompletion: boolean
+) {
+  const isMissing = value === null || value === undefined;
+
+  if (questionType === "text" || questionType === "textarea") {
+    if (isMissing || value === "") {
+      if (requiredForCompletion) throw new Error("Required text response missing");
+      return null;
+    }
+    if (typeof value !== "string") throw new Error("Invalid text response");
+    return value.trim();
+  }
+
+  if (questionType === "boolean") {
+    if (isMissing) {
+      if (requiredForCompletion) throw new Error("Required boolean response missing");
+      return null;
+    }
+    if (typeof value !== "boolean") throw new Error("Invalid boolean response");
+    return value;
+  }
+
+  if (questionType === "single_select") {
+    if (isMissing || value === "") {
+      if (requiredForCompletion) throw new Error("Required selection response missing");
+      return null;
+    }
+    if (typeof value !== "string") throw new Error("Invalid selection response");
+    return value;
+  }
+
+  if (questionType === "multi_select") {
+    if (isMissing) {
+      if (requiredForCompletion) throw new Error("Required multi-select response missing");
+      return [];
+    }
+    if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+      throw new Error("Invalid multi-select response");
+    }
+    if (requiredForCompletion && value.length === 0) {
+      throw new Error("Required multi-select response missing");
+    }
+    return value;
+  }
+
+  if (questionType === "number") {
+    if (isMissing || value === "") {
+      if (requiredForCompletion) throw new Error("Required number response missing");
+      return null;
+    }
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new Error("Invalid number response");
+    }
+    return value;
+  }
+
+  if (questionType === "date") {
+    if (isMissing || value === "") {
+      if (requiredForCompletion) throw new Error("Required date response missing");
+      return null;
+    }
+    if (typeof value !== "string" || Number.isNaN(new Date(value).getTime())) {
+      throw new Error("Invalid date response");
+    }
+    return value;
+  }
+
+  if (questionType === "photo") {
+    if (isMissing) {
+      if (requiredForCompletion) throw new Error("Required photo response missing");
+      return [];
+    }
+    if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+      throw new Error("Invalid photo response");
+    }
+    if (requiredForCompletion && value.length === 0) {
+      throw new Error("Required photo response missing");
+    }
+    return value;
+  }
+
+  if (questionType === "signature") {
+    if (isMissing || value === "") {
+      if (requiredForCompletion) throw new Error("Required signature response missing");
+      return null;
+    }
+    if (typeof value !== "string") throw new Error("Invalid signature response");
+    return value;
+  }
+
+  throw new Error(`Unsupported question type: ${questionType}`);
+}
+
+async function normalizeTemplateResponses(
+  input: HandoverInput,
+  options?: { allowInactiveTemplate?: boolean }
+) {
+  if (!input.templateId) return null;
+
+  const templateConditions = options?.allowInactiveTemplate
+    ? eq(formTemplates.id, input.templateId)
+    : and(eq(formTemplates.id, input.templateId), eq(formTemplates.isActive, true));
+
+  const [template] = await db
+    .select({
+      id: formTemplates.id,
+      name: formTemplates.name,
+      version: formTemplates.version,
+      isActive: formTemplates.isActive,
+    })
+    .from(formTemplates)
+    .where(templateConditions)
+    .limit(1);
+
+  if (!template) throw new Error("Dynamic form template not found");
+
+  const questions = await db
+    .select({
+      id: formTemplateQuestions.id,
+      key: formTemplateQuestions.key,
+      label: formTemplateQuestions.label,
+      type: formTemplateQuestions.type,
+      required: formTemplateQuestions.required,
+      optionsJson: formTemplateQuestions.optionsJson,
+    })
+    .from(formTemplateQuestions)
+    .where(eq(formTemplateQuestions.templateId, template.id))
+    .orderBy(asc(formTemplateQuestions.position));
+
+  const responseMap = new Map<string, DynamicTemplateResponseInput>();
+  for (const response of input.templateResponses || []) {
+    responseMap.set(response.questionId, response);
+  }
+
+  const normalized = questions.map((question) => {
+    const response = responseMap.get(question.id);
+    const normalizedValue = validateTemplateResponseValue(
+      question.type,
+      response?.value ?? null,
+      question.required && input.status === "completed"
+    );
+
+    if (
+      (question.type === "single_select" || question.type === "multi_select") &&
+      question.optionsJson
+    ) {
+      const optionsSet = new Set(question.optionsJson);
+      if (
+        question.type === "single_select" &&
+        normalizedValue !== null &&
+        !optionsSet.has(normalizedValue as string)
+      ) {
+        throw new Error(`Invalid option selected for ${question.label}`);
+      }
+      if (
+        question.type === "multi_select" &&
+        Array.isArray(normalizedValue) &&
+        normalizedValue.some((selected) => !optionsSet.has(selected))
+      ) {
+        throw new Error(`Invalid option selected for ${question.label}`);
+      }
+    }
+
+    return {
+      questionId: question.id,
+      questionKey: question.key,
+      questionLabel: question.label,
+      questionType: question.type,
+      value: normalizedValue,
+    };
+  });
+
+  return {
+    templateId: template.id,
+    templateVersion: template.version,
+    responses: normalized,
+  };
+}
+
+async function syncTemplateResponses(
+  handoverId: string,
+  normalized:
+    | {
+        templateId: string;
+        templateVersion: number;
+        responses: DynamicTemplateResponseInput[];
+      }
+    | null,
+  options?: { preserveLegacyWithoutQuestionId?: boolean }
+) {
+  let preservedLegacyResponses: Array<{
+    questionId: string | null;
+    questionKey: string;
+    questionLabel: string;
+    questionType: string;
+    valueJson: unknown;
+  }> = [];
+
+  if (options?.preserveLegacyWithoutQuestionId) {
+    preservedLegacyResponses = await db
+      .select({
+        questionId: handoverFormResponses.questionId,
+        questionKey: handoverFormResponses.questionKey,
+        questionLabel: handoverFormResponses.questionLabel,
+        questionType: handoverFormResponses.questionType,
+        valueJson: handoverFormResponses.valueJson,
+      })
+      .from(handoverFormResponses)
+      .where(
+        and(
+          eq(handoverFormResponses.handoverId, handoverId),
+          sql`${handoverFormResponses.questionId} IS NULL`
+        )
+      );
+  }
+
+  await db
+    .delete(handoverFormResponses)
+    .where(eq(handoverFormResponses.handoverId, handoverId));
+
+  const rows = [
+    ...(normalized?.responses.map((response) => ({
+      handoverId,
+      questionId: response.questionId,
+      questionKey: response.questionKey,
+      questionLabel: response.questionLabel,
+      questionType: response.questionType,
+      valueJson: response.value,
+    })) || []),
+    ...preservedLegacyResponses.map((response) => ({
+      handoverId,
+      questionId: response.questionId,
+      questionKey: response.questionKey,
+      questionLabel: response.questionLabel,
+      questionType: response.questionType,
+      valueJson: response.valueJson,
+    })),
+  ];
+
+  if (rows.length === 0) return;
+  await db.insert(handoverFormResponses).values(rows);
+}
+
 type ReportPermissionUser = {
   role: string;
   canViewAllReports?: boolean;
@@ -215,6 +470,7 @@ export async function createHandover(input: HandoverInput) {
   const session = await requireActionSession();
 
   validateHandoverInput(input);
+  const normalizedTemplate = await normalizeTemplateResponses(input);
   const normalizedMake = normalizeVehicleLabel(input.make);
   const normalizedModel = normalizeVehicleLabel(input.model);
 
@@ -230,7 +486,7 @@ export async function createHandover(input: HandoverInput) {
     })
     .returning();
 
-  const handoverType = input.type || "collection";
+  const handoverType = input.type || (input.templateId ? "dynamic" : "collection");
   const [handover] = await db
     .insert(handovers)
     .values({
@@ -261,8 +517,12 @@ export async function createHandover(input: HandoverInput) {
         handoverType === "collection" && input.purchaseSource?.trim() === "other"
           ? input.purchaseSourceOther?.trim() || null
           : null,
+      templateId: normalizedTemplate?.templateId ?? null,
+      templateVersion: normalizedTemplate?.templateVersion ?? null,
     })
     .returning();
+
+  await syncTemplateResponses(handover.id, normalizedTemplate);
 
   if (input.checks.length > 0) {
     await db.insert(handoverChecks).values(
@@ -325,6 +585,9 @@ export async function updateHandover(
   }
 
   validateHandoverInput(input);
+  const normalizedTemplate = await normalizeTemplateResponses(input, {
+    allowInactiveTemplate: true,
+  });
   const normalizedMake = normalizeVehicleLabel(input.make);
   const normalizedModel = normalizeVehicleLabel(input.model);
 
@@ -353,7 +616,8 @@ export async function updateHandover(
     })
     .where(eq(vehicles.id, existing.vehicleId));
 
-  const handoverType = input.type || existing.type || "collection";
+  const handoverType =
+    input.type || (normalizedTemplate?.templateId ? "dynamic" : existing.type || "collection");
   await db
     .update(handovers)
     .set({
@@ -377,10 +641,25 @@ export async function updateHandover(
                 ? input.purchaseSourceOther?.trim() || null
                 : null,
           }
-        : {}),
+        : {
+            fuelType: null,
+            collectionOutcome: null,
+            collectionRejectionReason: null,
+            purchaseSource: null,
+            purchaseSourceOther: null,
+          }),
+      templateId: normalizedTemplate?.templateId ?? null,
+      templateVersion:
+        normalizedTemplate?.templateId === existing.templateId
+          ? existing.templateVersion ?? normalizedTemplate?.templateVersion ?? null
+          : normalizedTemplate?.templateVersion ?? null,
       updatedAt: new Date(),
     })
     .where(eq(handovers.id, handoverId));
+
+  await syncTemplateResponses(handoverId, normalizedTemplate, {
+    preserveLegacyWithoutQuestionId: true,
+  });
 
   await db
     .delete(handoverChecks)
@@ -460,7 +739,63 @@ export async function getHandover(handoverId: string) {
     return null;
   }
 
-  return result;
+  if (!result.templateId) {
+    return result;
+  }
+
+  const [template] = await db
+    .select({
+      id: formTemplates.id,
+      name: formTemplates.name,
+      description: formTemplates.description,
+      version: formTemplates.version,
+      isDraft: formTemplates.isDraft,
+      isActive: formTemplates.isActive,
+      createdAt: formTemplates.createdAt,
+      updatedAt: formTemplates.updatedAt,
+    })
+    .from(formTemplates)
+    .where(eq(formTemplates.id, result.templateId))
+    .limit(1);
+
+  const templateQuestions = await db
+    .select({
+      id: formTemplateQuestions.id,
+      templateId: formTemplateQuestions.templateId,
+      key: formTemplateQuestions.key,
+      label: formTemplateQuestions.label,
+      type: formTemplateQuestions.type,
+      required: formTemplateQuestions.required,
+      helpText: formTemplateQuestions.helpText,
+      optionsJson: formTemplateQuestions.optionsJson,
+      position: formTemplateQuestions.position,
+    })
+    .from(formTemplateQuestions)
+    .where(eq(formTemplateQuestions.templateId, result.templateId))
+    .orderBy(asc(formTemplateQuestions.position));
+
+  const templateResponses = await db
+    .select({
+      id: handoverFormResponses.id,
+      questionId: handoverFormResponses.questionId,
+      questionKey: handoverFormResponses.questionKey,
+      questionLabel: handoverFormResponses.questionLabel,
+      questionType: handoverFormResponses.questionType,
+      valueJson: handoverFormResponses.valueJson,
+    })
+    .from(handoverFormResponses)
+    .where(eq(handoverFormResponses.handoverId, result.id));
+
+  return {
+    ...result,
+    dynamicTemplate: template
+      ? {
+          ...template,
+          questions: templateQuestions,
+        }
+      : null,
+    dynamicResponses: templateResponses,
+  };
 }
 
 export async function listHandovers(limit = 20, offset = 0) {
@@ -886,7 +1221,7 @@ export interface HandoverFilters {
   make?: string;
   model?: string;
   status?: "draft" | "completed";
-  type?: "collection" | "delivery";
+  type?: "collection" | "delivery" | "dynamic";
   inspectorId?: string;
   dateFrom?: string;
   dateTo?: string;

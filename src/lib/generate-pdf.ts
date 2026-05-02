@@ -5,6 +5,8 @@ import {
   handoverChecks,
   tyreRecords,
   handoverPhotos,
+  handoverFormResponses,
+  formTemplates,
 } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { CHECK_ITEM_LABELS, DELIVERY_CHECK_ITEM_LABELS, type CheckItemKey, type DeliveryCheckItemKey } from "@/lib/check-items";
@@ -230,6 +232,28 @@ export async function generateHandoverPdf(
     .from(handoverPhotos)
     .where(eq(handoverPhotos.handoverId, handoverId));
 
+  const templateResponses = await db
+    .select({
+      id: handoverFormResponses.id,
+      questionLabel: handoverFormResponses.questionLabel,
+      questionType: handoverFormResponses.questionType,
+      valueJson: handoverFormResponses.valueJson,
+    })
+    .from(handoverFormResponses)
+    .where(eq(handoverFormResponses.handoverId, handoverId));
+
+  const [dynamicTemplate] = handover.templateId
+    ? await db
+        .select({
+          id: formTemplates.id,
+          name: formTemplates.name,
+          version: formTemplates.version,
+        })
+        .from(formTemplates)
+        .where(eq(formTemplates.id, handover.templateId))
+        .limit(1)
+    : [null];
+
   const doc = new PDFDocument({
     size: "A4",
     margins: { top: LEFT, bottom: 50, left: LEFT, right: LEFT },
@@ -245,13 +269,19 @@ export async function generateHandoverPdf(
   drawHeader(doc);
 
   const isDelivery = handover.type === "delivery";
+  const isCollection = handover.type === "collection";
 
   // ── STATUS + REPORT TITLE ─────────────────────────────
   const statusText = handover.status.toUpperCase();
   const statusColor = handover.status === "completed" ? GREEN : "#d97706";
   const statusBg = handover.status === "completed" ? "#dcfce7" : "#fef3c7";
 
-  const reportTitle = isDelivery ? "Vehicle Delivery Report" : "Vehicle Handover Report";
+  const reportTitle =
+    handover.type === "dynamic"
+      ? `${dynamicTemplate?.name || "Dynamic Form"} (V${handover.templateVersion ?? dynamicTemplate?.version ?? 1}) Report`
+      : isDelivery
+        ? "Vehicle Delivery Report"
+        : "Vehicle Handover Report";
   doc.fontSize(15).font("Helvetica-Bold").fillColor(BLACK)
     .text(reportTitle, LEFT, doc.y, { lineBreak: false });
 
@@ -271,7 +301,7 @@ export async function generateHandoverPdf(
     ["Vehicle", `${vehicle.make} ${vehicle.model}`],
     ["Registration", vehicle.registration],
   ];
-  if (!isDelivery) {
+  if (isCollection) {
     const purchaseSourceLabel =
       handover.purchaseSource === "motorway"
         ? "Motorway"
@@ -312,7 +342,7 @@ export async function generateHandoverPdf(
   doc.y = detailBoxY + detailBoxH + 2;
 
   if (
-    !isDelivery &&
+    isCollection &&
     handover.collectionOutcome === "rejected" &&
     handover.collectionRejectionReason?.trim()
   ) {
@@ -409,7 +439,7 @@ export async function generateHandoverPdf(
   }
 
   // ── TYRE INFORMATION (collection only) ──────────────────
-  if (!isDelivery && tyres.length > 0) {
+  if (isCollection && tyres.length > 0) {
     drawSectionTitle(doc, "Tyre Information");
 
     const tyreCols = [
@@ -498,6 +528,51 @@ export async function generateHandoverPdf(
       });
 
     doc.y = boxY + boxH + 4;
+  }
+
+  if (templateResponses.length > 0) {
+    drawSectionTitle(
+      doc,
+      dynamicTemplate?.name
+        ? `${dynamicTemplate.name} (V${handover.templateVersion ?? dynamicTemplate.version}) Responses`
+        : "Dynamic Form Responses"
+    );
+    for (const response of templateResponses) {
+      let rendered = "N/A";
+      if (response.questionType === "photo") {
+        const count = Array.isArray(response.valueJson)
+          ? response.valueJson.filter((value) => typeof value === "string").length
+          : 0;
+        rendered = count > 0 ? `${count} photo${count === 1 ? "" : "s"} attached` : "N/A";
+      } else if (response.questionType === "signature") {
+        rendered =
+          typeof response.valueJson === "string" && response.valueJson.trim().length > 0
+            ? "Signature captured"
+            : "N/A";
+      } else if (Array.isArray(response.valueJson)) {
+        rendered = response.valueJson.join(", ") || "N/A";
+      } else if (typeof response.valueJson === "boolean") {
+        rendered = response.valueJson ? "Yes" : "No";
+      } else if (typeof response.valueJson === "number") {
+        rendered = Number.isFinite(response.valueJson) ? String(response.valueJson) : "N/A";
+      } else if (typeof response.valueJson === "string") {
+        rendered = response.valueJson.trim() || "N/A";
+      }
+      ensureSpace(doc, 24);
+      doc
+        .fontSize(8)
+        .font("Helvetica")
+        .fillColor(GRAY)
+        .text(response.questionLabel.toUpperCase(), LEFT, doc.y, {
+          lineBreak: false,
+        });
+      doc
+        .fontSize(10)
+        .font("Helvetica-Bold")
+        .fillColor(DARK)
+        .text(rendered, LEFT, doc.y + 3);
+      doc.y += 4;
+    }
   }
 
   // ── V5 DOCUMENT (delivery only) ─────────────────────────

@@ -113,7 +113,11 @@ function HandoverDataCell({
     case "type":
       return (
         <Badge variant="outline" className="text-[10px]">
-          {row.type === "delivery" ? "Delivery" : "Collection"}
+          {row.type === "delivery"
+            ? "Delivery"
+            : row.type === "dynamic"
+              ? "Dynamic"
+              : "Collection"}
         </Badge>
       );
     case "status":
@@ -507,6 +511,7 @@ export function HandoversList({
                     type: (e.target.value || undefined) as
                       | "collection"
                       | "delivery"
+                      | "dynamic"
                       | undefined,
                   }))
                 }
@@ -515,6 +520,7 @@ export function HandoversList({
                 <option value="">All Types</option>
                 <option value="collection">Collection</option>
                 <option value="delivery">Delivery</option>
+                <option value="dynamic">Dynamic</option>
               </select>
             </div>
 

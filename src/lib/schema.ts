@@ -75,6 +75,32 @@ export const vehicles = pgTable("vehicles", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const formTemplates = pgTable("form_templates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  version: integer("version").notNull().default(1),
+  isDraft: boolean("is_draft").notNull().default(true),
+  description: text("description"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const formTemplateQuestions = pgTable("form_template_questions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  templateId: uuid("template_id")
+    .references(() => formTemplates.id, { onDelete: "cascade" })
+    .notNull(),
+  key: varchar("question_key", { length: 100 }).notNull(),
+  label: varchar("label", { length: 255 }).notNull(),
+  type: varchar("question_type", { length: 40 }).notNull(),
+  required: boolean("required").notNull().default(false),
+  helpText: text("help_text"),
+  optionsJson: jsonb("options_json").$type<string[] | null>(),
+  position: integer("position").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const handovers = pgTable("handovers", {
   id: uuid("id").defaultRandom().primaryKey(),
   vehicleId: uuid("vehicle_id")
@@ -99,6 +125,10 @@ export const handovers = pgTable("handovers", {
   purchaseSource: varchar("purchase_source", { length: 20 }),
   /** Free text when purchaseSource is "other" */
   purchaseSourceOther: varchar("purchase_source_other", { length: 255 }),
+  templateId: uuid("template_id").references(() => formTemplates.id, {
+    onDelete: "set null",
+  }),
+  templateVersion: integer("template_version"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -136,6 +166,21 @@ export const handoverPhotos = pgTable("handover_photos", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const handoverFormResponses = pgTable("handover_form_responses", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  handoverId: uuid("handover_id")
+    .references(() => handovers.id, { onDelete: "cascade" })
+    .notNull(),
+  questionId: uuid("question_id").references(() => formTemplateQuestions.id, {
+    onDelete: "set null",
+  }),
+  questionKey: varchar("question_key", { length: 100 }).notNull(),
+  questionLabel: varchar("question_label", { length: 255 }).notNull(),
+  questionType: varchar("question_type", { length: 40 }).notNull(),
+  valueJson: jsonb("value_json"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   vehicles: many(vehicles),
@@ -161,6 +206,22 @@ export const vehiclesRelations = relations(vehicles, ({ one, many }) => ({
   handovers: many(handovers),
 }));
 
+export const formTemplatesRelations = relations(formTemplates, ({ many }) => ({
+  questions: many(formTemplateQuestions),
+  handovers: many(handovers),
+}));
+
+export const formTemplateQuestionsRelations = relations(
+  formTemplateQuestions,
+  ({ one, many }) => ({
+    template: one(formTemplates, {
+      fields: [formTemplateQuestions.templateId],
+      references: [formTemplates.id],
+    }),
+    responses: many(handoverFormResponses),
+  })
+);
+
 export const handoversRelations = relations(handovers, ({ one, many }) => ({
   vehicle: one(vehicles, {
     fields: [handovers.vehicleId],
@@ -170,9 +231,14 @@ export const handoversRelations = relations(handovers, ({ one, many }) => ({
     fields: [handovers.userId],
     references: [users.id],
   }),
+  template: one(formTemplates, {
+    fields: [handovers.templateId],
+    references: [formTemplates.id],
+  }),
   checks: many(handoverChecks),
   tyres: many(tyreRecords),
   photos: many(handoverPhotos),
+  dynamicResponses: many(handoverFormResponses),
 }));
 
 export const handoverChecksRelations = relations(
@@ -198,6 +264,20 @@ export const handoverPhotosRelations = relations(
     handover: one(handovers, {
       fields: [handoverPhotos.handoverId],
       references: [handovers.id],
+    }),
+  })
+);
+
+export const handoverFormResponsesRelations = relations(
+  handoverFormResponses,
+  ({ one }) => ({
+    handover: one(handovers, {
+      fields: [handoverFormResponses.handoverId],
+      references: [handovers.id],
+    }),
+    question: one(formTemplateQuestions, {
+      fields: [handoverFormResponses.questionId],
+      references: [formTemplateQuestions.id],
     }),
   })
 );

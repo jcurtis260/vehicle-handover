@@ -40,7 +40,10 @@ export default async function HandoverReviewPage({
     canEditAllReports || (isOwner && (handover.status === "draft" || canEdit));
   const canDeleteThisReport = isAdmin || (canDelete && isOwner);
 
+  const dynamicTemplate = "dynamicTemplate" in handover ? handover.dynamicTemplate : null;
+  const dynamicResponses = "dynamicResponses" in handover ? handover.dynamicResponses : [];
   const isDelivery = handover.type === "delivery";
+  const isCollection = handover.type === "collection";
   const purchaseSourceLabel = (() => {
     switch (handover.purchaseSource) {
       case "motorway":
@@ -88,7 +91,11 @@ export default async function HandoverReviewPage({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Badge variant="outline">
-            {isDelivery ? "Delivery" : "Collection"}
+            {handover.type === "dynamic"
+              ? `${dynamicTemplate?.name || "Dynamic Form"} (V${handover.templateVersion ?? dynamicTemplate?.version ?? 1})`
+              : isDelivery
+                ? "Delivery"
+                : "Collection"}
           </Badge>
           <Badge variant={handover.status === "completed" ? "success" : "warning"}>
             {handover.status}
@@ -139,7 +146,7 @@ export default async function HandoverReviewPage({
               <dt className="text-muted-foreground">Model</dt>
               <dd className="font-medium">{handover.vehicle.model}</dd>
             </div>
-            {!isDelivery && (
+            {isCollection && (
               <div>
                 <dt className="text-muted-foreground">Fuel type</dt>
                 <dd className="font-medium">{fuelTypeLabel(handover.fuelType)}</dd>
@@ -155,7 +162,7 @@ export default async function HandoverReviewPage({
                 {handover.mileage?.toLocaleString() || "N/A"}
               </dd>
             </div>
-            {!isDelivery && (
+            {isCollection && (
               <div className="col-span-2 sm:col-span-1">
                 <dt className="text-muted-foreground">Collection outcome</dt>
                 <dd className="font-medium">
@@ -163,19 +170,19 @@ export default async function HandoverReviewPage({
                 </dd>
               </div>
             )}
-            {!isDelivery && (
+            {isCollection && (
               <div>
                 <dt className="text-muted-foreground">Bought from</dt>
                 <dd className="font-medium">{purchaseSourceLabel}</dd>
               </div>
             )}
-            {!isDelivery && handover.purchaseSource === "other" && (
+            {isCollection && handover.purchaseSource === "other" && (
               <div>
                 <dt className="text-muted-foreground">Where from</dt>
                 <dd className="font-medium">{handover.purchaseSourceOther?.trim() || "N/A"}</dd>
               </div>
             )}
-            {!isDelivery &&
+            {isCollection &&
               handover.collectionOutcome === "rejected" && (
                 <div className="col-span-2 sm:col-span-3">
                   <dt className="text-muted-foreground">Rejection reason</dt>
@@ -226,7 +233,7 @@ export default async function HandoverReviewPage({
       )}
 
       {/* Tyre info — collection only */}
-      {!isDelivery && handover.tyres.length > 0 && (
+      {isCollection && handover.tyres.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Tyre Information</CardTitle>
@@ -329,6 +336,40 @@ export default async function HandoverReviewPage({
           </CardHeader>
           <CardContent>
             <p className="text-sm whitespace-pre-wrap">{handover.otherComments}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {dynamicTemplate && dynamicResponses.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">
+              {dynamicTemplate.name} (V{handover.templateVersion ?? dynamicTemplate.version}) Responses
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl className="space-y-3 text-sm">
+              {dynamicResponses.map((response) => {
+                const value = response.valueJson;
+                let display = "N/A";
+                if (Array.isArray(value)) {
+                  display = value.join(", ") || "N/A";
+                } else if (typeof value === "boolean") {
+                  display = value ? "Yes" : "No";
+                } else if (typeof value === "number") {
+                  display = value.toString();
+                } else if (typeof value === "string" && value.trim()) {
+                  display = value;
+                }
+
+                return (
+                  <div key={response.id}>
+                    <dt className="text-muted-foreground">{response.questionLabel}</dt>
+                    <dd className="font-medium whitespace-pre-wrap">{display}</dd>
+                  </div>
+                );
+              })}
+            </dl>
           </CardContent>
         </Card>
       )}

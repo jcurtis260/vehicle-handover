@@ -11,7 +11,18 @@ import { revalidatePath } from "next/cache";
 function isUndefinedColumnError(error: unknown) {
   if (!error || typeof error !== "object") return false;
   const maybeCode = (error as { code?: unknown }).code;
-  return maybeCode === "42703";
+  if (maybeCode === "42703") return true;
+
+  const maybeCauseCode = (
+    error as { cause?: { code?: unknown } }
+  ).cause?.code;
+  if (maybeCauseCode === "42703") return true;
+
+  const message =
+    (error as { message?: string }).message ||
+    (error as { cause?: { message?: string } }).cause?.message ||
+    "";
+  return /column .* does not exist/i.test(message);
 }
 
 export async function listUsers() {
@@ -42,22 +53,46 @@ export async function listUsers() {
 
     // Backward-compatible fallback for deployments where new permission columns
     // have not been applied yet. This keeps Settings usable instead of crashing.
-    return db
-      .select({
-        id: users.id,
-        email: users.email,
-        name: users.name,
-        role: users.role,
-        canEdit: sql<boolean>`false`,
-        canDelete: sql<boolean>`false`,
-        canViewChangelog: sql<boolean>`false`,
-        canViewAllReports: sql<boolean>`false`,
-        canEditAllReports: sql<boolean>`false`,
-        lastLoginAt: sql<Date | null>`NULL`,
-        createdAt: sql<Date>`NOW()`,
-      })
-      .from(users)
-      .orderBy(users.name);
+    try {
+      return await db
+        .select({
+          id: users.id,
+          email: users.email,
+          name: users.name,
+          role: users.role,
+          canEdit: sql<boolean>`false`,
+          canDelete: sql<boolean>`false`,
+          canViewChangelog: sql<boolean>`false`,
+          canViewAllReports: sql<boolean>`false`,
+          canEditAllReports: sql<boolean>`false`,
+          lastLoginAt: sql<Date | null>`NULL`,
+          createdAt: users.createdAt,
+        })
+        .from(users)
+        .orderBy(users.name);
+    } catch {
+      // Extra-safe minimal fallback for very old schemas.
+      const minimalUsers = await db
+        .select({
+          id: users.id,
+          email: users.email,
+          name: users.name,
+          role: users.role,
+        })
+        .from(users)
+        .orderBy(users.name);
+
+      return minimalUsers.map((user) => ({
+        ...user,
+        canEdit: false,
+        canDelete: false,
+        canViewChangelog: false,
+        canViewAllReports: false,
+        canEditAllReports: false,
+        lastLoginAt: null,
+        createdAt: new Date(),
+      }));
+    }
   }
 }
 

@@ -722,7 +722,7 @@ export function HandoverForm({ mode, handoverId, initialData }: HandoverFormProp
       </div>
 
       <div className="fixed bottom-16 lg:bottom-0 left-0 right-0 lg:left-64 z-40 border-t border-border bg-card p-3 safe-bottom">
-        <div className="flex gap-2 max-w-4xl mx-auto">
+        <div className="flex flex-col sm:flex-row gap-2 max-w-4xl mx-auto">
           <Button
             type="button"
             variant="outline"

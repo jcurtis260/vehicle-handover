@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Search,
   Settings,
+  FileCog,
   FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ const navItems = [
   { href: "/handovers/new", label: "New", icon: ClipboardPlus },
   { href: "/handovers", label: "All", icon: ClipboardList, exact: true },
   { href: "/search", label: "Search", icon: Search },
+  { href: "/forms", label: "Forms", icon: FileCog, adminOnly: true },
   { href: "/changelog", label: "Log", icon: FileText, permission: "changelog" as const },
   { href: "/settings", label: "Settings", icon: Settings, adminOnly: true },
 ];

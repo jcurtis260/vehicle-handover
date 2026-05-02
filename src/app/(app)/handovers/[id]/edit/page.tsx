@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { HandoverForm } from "@/components/handover-form";
 import { DeliveryForm } from "@/components/delivery-form";
+import { DynamicHandoverForm } from "@/components/dynamic-handover-form";
 import { notFound, redirect } from "next/navigation";
 import { CHECK_ITEMS } from "@/lib/check-items";
 import { DELIVERY_CHECK_ITEMS } from "@/lib/check-items";
@@ -31,6 +32,39 @@ export default async function EditHandoverPage({
 
   if (handover.status === "completed" && !canEdit && !canEditAllReports) {
     redirect(`/handovers/${id}`);
+  }
+
+  const dynamicTemplate = "dynamicTemplate" in handover ? handover.dynamicTemplate : null;
+  const dynamicResponses = "dynamicResponses" in handover ? handover.dynamicResponses : [];
+
+  if (handover.templateId && dynamicTemplate) {
+    const responseMap = Object.fromEntries(
+      dynamicResponses.map((response) => [response.questionId, response.valueJson])
+    );
+
+    return (
+      <div className="space-y-4 max-w-4xl mx-auto">
+        <h1 className="text-2xl font-bold">
+          Edit {dynamicTemplate.name} (V{handover.templateVersion ?? dynamicTemplate.version})
+        </h1>
+        <DynamicHandoverForm
+          mode="edit"
+          handoverId={handover.id}
+          template={dynamicTemplate}
+          initialData={{
+            make: handover.vehicle.make,
+            model: handover.vehicle.model,
+            registration: handover.vehicle.registration,
+            date: new Date(handover.date).toISOString().split("T")[0],
+            name: handover.name,
+            mileage: handover.mileage,
+            otherComments: handover.otherComments || "",
+            status: handover.status,
+            responses: responseMap,
+          }}
+        />
+      </div>
+    );
   }
 
   const isDelivery = handover.type === "delivery";

@@ -25,6 +25,59 @@ async function runAutoMigrations() {
     await _sql`ALTER TABLE handovers ADD COLUMN IF NOT EXISTS purchase_source VARCHAR(20)`;
     await _sql`ALTER TABLE handovers ADD COLUMN IF NOT EXISTS purchase_source_other VARCHAR(255)`;
     await _sql`
+      CREATE TABLE IF NOT EXISTS form_templates (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(255) NOT NULL,
+        version INTEGER NOT NULL DEFAULT 1,
+        is_draft BOOLEAN NOT NULL DEFAULT true,
+        description TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `;
+    await _sql`ALTER TABLE form_templates ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1`;
+    await _sql`ALTER TABLE form_templates ADD COLUMN IF NOT EXISTS is_draft BOOLEAN`;
+    await _sql`UPDATE form_templates SET is_draft = false WHERE is_draft IS NULL`;
+    await _sql`ALTER TABLE form_templates ALTER COLUMN is_draft SET NOT NULL`;
+    await _sql`ALTER TABLE form_templates ALTER COLUMN is_draft SET DEFAULT true`;
+    await _sql`
+      CREATE TABLE IF NOT EXISTS form_template_questions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        template_id UUID NOT NULL REFERENCES form_templates(id) ON DELETE CASCADE,
+        question_key VARCHAR(100) NOT NULL,
+        label VARCHAR(255) NOT NULL,
+        question_type VARCHAR(40) NOT NULL,
+        required BOOLEAN NOT NULL DEFAULT false,
+        help_text TEXT,
+        options_json JSONB,
+        position INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `;
+    await _sql`ALTER TABLE handovers ADD COLUMN IF NOT EXISTS template_id UUID REFERENCES form_templates(id) ON DELETE SET NULL`;
+    await _sql`ALTER TABLE handovers ADD COLUMN IF NOT EXISTS template_version INTEGER`;
+    await _sql`
+      CREATE TABLE IF NOT EXISTS handover_form_responses (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        handover_id UUID NOT NULL REFERENCES handovers(id) ON DELETE CASCADE,
+        question_id UUID REFERENCES form_template_questions(id) ON DELETE SET NULL,
+        question_key VARCHAR(100) NOT NULL,
+        question_label VARCHAR(255) NOT NULL,
+        question_type VARCHAR(40) NOT NULL,
+        value_json JSONB,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `;
+    await _sql`
+      CREATE INDEX IF NOT EXISTS form_template_questions_template_id_idx
+      ON form_template_questions (template_id, position)
+    `;
+    await _sql`
+      CREATE INDEX IF NOT EXISTS handover_form_responses_handover_id_idx
+      ON handover_form_responses (handover_id)
+    `;
+    await _sql`
       CREATE TABLE IF NOT EXISTS vehicle_makes (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(100) NOT NULL,

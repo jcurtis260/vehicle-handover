@@ -10,6 +10,7 @@ import {
   ClipboardList,
   Search,
   Settings,
+  FileCog,
   LogOut,
   FileText,
 } from "lucide-react";
@@ -21,6 +22,7 @@ const navItems = [
   { href: "/handovers/new", label: "New Handover", icon: ClipboardPlus },
   { href: "/handovers", label: "All Handovers", icon: ClipboardList, exact: true },
   { href: "/search", label: "Search", icon: Search },
+  { href: "/forms", label: "Forms", icon: FileCog, adminOnly: true },
   { href: "/changelog", label: "Changelog", icon: FileText, permission: "changelog" as const },
   { href: "/settings", label: "Settings", icon: Settings, adminOnly: true },
 ];
