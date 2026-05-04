@@ -38,6 +38,8 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 255 }).notNull().unique(),
   name: varchar("name", { length: 255 }).notNull(),
   passwordHash: text("password_hash").notNull(),
+  passwordChangedAt: timestamp("password_changed_at").defaultNow().notNull(),
+  passwordMaxAgeDays: integer("password_max_age_days").default(30).notNull(),
   role: roleEnum("role").notNull().default("user"),
   canEdit: boolean("can_edit").notNull().default(false),
   canDelete: boolean("can_delete").notNull().default(false),

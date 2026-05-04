@@ -11,6 +11,14 @@ async function runAutoMigrations() {
   _migrated = true;
   try {
     await _sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP`;
+    await _sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMP`;
+    await _sql`UPDATE users SET password_changed_at = COALESCE(password_changed_at, created_at, NOW()) WHERE password_changed_at IS NULL`;
+    await _sql`ALTER TABLE users ALTER COLUMN password_changed_at SET DEFAULT NOW()`;
+    await _sql`ALTER TABLE users ALTER COLUMN password_changed_at SET NOT NULL`;
+    await _sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_max_age_days INTEGER DEFAULT 30`;
+    await _sql`UPDATE users SET password_max_age_days = 30 WHERE password_max_age_days IS NULL`;
+    await _sql`ALTER TABLE users ALTER COLUMN password_max_age_days SET DEFAULT 30`;
+    await _sql`ALTER TABLE users ALTER COLUMN password_max_age_days SET NOT NULL`;
     await _sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_edit BOOLEAN NOT NULL DEFAULT false`;
     await _sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_delete BOOLEAN NOT NULL DEFAULT false`;
     await _sql`ALTER TABLE tyre_records ADD COLUMN IF NOT EXISTS tyre_type VARCHAR(20) NOT NULL DEFAULT 'normal'`;

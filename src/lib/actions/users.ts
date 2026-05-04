@@ -3,10 +3,16 @@
 import { db } from "@/lib/db";
 import { users, handovers, vehicles, handoverPhotos } from "@/lib/schema";
 import { eq, sql } from "drizzle-orm";
-import { hash } from "bcryptjs";
+import { compare, hash } from "bcryptjs";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import {
+  DEFAULT_PASSWORD_MAX_AGE_DAYS,
+  MAX_PASSWORD_MAX_AGE_DAYS,
+  MIN_PASSWORD_MAX_AGE_DAYS,
+  normalizePasswordMaxAgeDays,
+} from "@/lib/password-policy";
 
 function isUndefinedColumnError(error: unknown) {
   if (!error || typeof error !== "object") return false;
@@ -43,6 +49,8 @@ export async function listUsers() {
         canViewChangelog: users.canViewChangelog,
         canViewAllReports: users.canViewAllReports,
         canEditAllReports: users.canEditAllReports,
+        passwordChangedAt: users.passwordChangedAt,
+        passwordMaxAgeDays: users.passwordMaxAgeDays,
         lastLoginAt: users.lastLoginAt,
         createdAt: users.createdAt,
       })
@@ -65,6 +73,8 @@ export async function listUsers() {
           canViewChangelog: sql<boolean>`false`,
           canViewAllReports: sql<boolean>`false`,
           canEditAllReports: sql<boolean>`false`,
+          passwordChangedAt: sql<Date | null>`NULL`,
+          passwordMaxAgeDays: sql<number>`${DEFAULT_PASSWORD_MAX_AGE_DAYS}`,
           lastLoginAt: sql<Date | null>`NULL`,
           createdAt: users.createdAt,
         })
@@ -89,6 +99,8 @@ export async function listUsers() {
         canViewChangelog: false,
         canViewAllReports: false,
         canEditAllReports: false,
+        passwordChangedAt: null,
+        passwordMaxAgeDays: DEFAULT_PASSWORD_MAX_AGE_DAYS,
         lastLoginAt: null,
         createdAt: new Date(),
       }));
@@ -109,8 +121,11 @@ export async function createUser(input: {
     throw new Error("Forbidden");
   }
 
-  if (!input.name || input.name.length > 255) throw new Error("Invalid name");
-  if (!input.email || !EMAIL_REGEX.test(input.email) || input.email.length > 254)
+  const trimmedName = input.name.trim();
+  const normalizedEmail = input.email.trim().toLowerCase();
+
+  if (!trimmedName || trimmedName.length > 255) throw new Error("Invalid name");
+  if (!normalizedEmail || !EMAIL_REGEX.test(normalizedEmail) || normalizedEmail.length > 254)
     throw new Error("Invalid email");
   if (!input.password || input.password.length < 8 || input.password.length > 128)
     throw new Error("Password must be 8-128 characters");
@@ -120,7 +135,7 @@ export async function createUser(input: {
   const existing = await db
     .select()
     .from(users)
-    .where(eq(users.email, input.email.toLowerCase()))
+    .where(eq(users.email, normalizedEmail))
     .limit(1);
 
   if (existing.length > 0) {
@@ -132,9 +147,11 @@ export async function createUser(input: {
   const [user] = await db
     .insert(users)
     .values({
-      email: input.email.toLowerCase(),
-      name: input.name,
+      email: normalizedEmail,
+      name: trimmedName,
       passwordHash,
+      passwordChangedAt: new Date(),
+      passwordMaxAgeDays: DEFAULT_PASSWORD_MAX_AGE_DAYS,
       role: input.role,
     })
     .returning({
@@ -155,6 +172,7 @@ export async function updateUser(
     email?: string;
     role?: "admin" | "user";
     password?: string;
+    passwordMaxAgeDays?: number;
     canEdit?: boolean;
     canDelete?: boolean;
     canViewChangelog?: boolean;
@@ -179,16 +197,18 @@ export async function updateUser(
   if (!currentUser) throw new Error("User not found");
 
   if (input.name !== undefined) {
-    if (!input.name || input.name.length > 255) throw new Error("Invalid name");
-    await db.update(users).set({ name: input.name }).where(eq(users.id, userId));
+    const trimmedName = input.name.trim();
+    if (!trimmedName || trimmedName.length > 255) throw new Error("Invalid name");
+    await db.update(users).set({ name: trimmedName }).where(eq(users.id, userId));
   }
 
   if (input.email !== undefined) {
-    if (!input.email || !EMAIL_REGEX.test(input.email) || input.email.length > 254)
+    const normalizedEmail = input.email.trim().toLowerCase();
+    if (!normalizedEmail || !EMAIL_REGEX.test(normalizedEmail) || normalizedEmail.length > 254)
       throw new Error("Invalid email");
     await db
       .update(users)
-      .set({ email: input.email.toLowerCase() })
+      .set({ email: normalizedEmail })
       .where(eq(users.id, userId));
   }
 
@@ -197,11 +217,31 @@ export async function updateUser(
     await db.update(users).set({ role: input.role }).where(eq(users.id, userId));
   }
 
+  if (input.passwordMaxAgeDays !== undefined) {
+    if (
+      !Number.isInteger(input.passwordMaxAgeDays) ||
+      input.passwordMaxAgeDays < MIN_PASSWORD_MAX_AGE_DAYS ||
+      input.passwordMaxAgeDays > MAX_PASSWORD_MAX_AGE_DAYS
+    ) {
+      throw new Error(
+        `Password expiry must be ${MIN_PASSWORD_MAX_AGE_DAYS}-${MAX_PASSWORD_MAX_AGE_DAYS} days`
+      );
+    }
+    const normalized = normalizePasswordMaxAgeDays(input.passwordMaxAgeDays);
+    await db
+      .update(users)
+      .set({ passwordMaxAgeDays: normalized })
+      .where(eq(users.id, userId));
+  }
+
   if (input.password !== undefined) {
     if (input.password.length < 8 || input.password.length > 128)
       throw new Error("Password must be 8-128 characters");
     const passwordHash = await hash(input.password, 12);
-    await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
+    await db
+      .update(users)
+      .set({ passwordHash, passwordChangedAt: new Date() })
+      .where(eq(users.id, userId));
   }
 
   if (input.canEdit !== undefined) {
@@ -241,6 +281,51 @@ export async function updateUser(
       .where(eq(users.id, userId));
   }
 
+  revalidatePath("/settings");
+}
+
+export async function changeOwnPassword(input: {
+  currentPassword: string;
+  newPassword: string;
+}) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    throw new Error("Forbidden");
+  }
+
+  if (!input.currentPassword) throw new Error("Current password is required");
+  if (!input.newPassword || input.newPassword.length < 8 || input.newPassword.length > 128) {
+    throw new Error("New password must be 8-128 characters");
+  }
+  if (input.currentPassword === input.newPassword) {
+    throw new Error("New password must be different from current password");
+  }
+
+  const [currentUser] = await db
+    .select({
+      passwordHash: users.passwordHash,
+    })
+    .from(users)
+    .where(eq(users.id, session.user.id))
+    .limit(1);
+
+  if (!currentUser) throw new Error("User not found");
+
+  const validCurrentPassword = await compare(
+    input.currentPassword,
+    currentUser.passwordHash
+  );
+  if (!validCurrentPassword) {
+    throw new Error("Current password is incorrect");
+  }
+
+  const passwordHash = await hash(input.newPassword, 12);
+  await db
+    .update(users)
+    .set({ passwordHash, passwordChangedAt: new Date() })
+    .where(eq(users.id, session.user.id));
+
+  revalidatePath("/password");
   revalidatePath("/settings");
 }
 

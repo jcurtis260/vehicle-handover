@@ -12,6 +12,9 @@ declare module "next-auth" {
       canViewChangelog: boolean;
       canViewAllReports: boolean;
       canEditAllReports: boolean;
+      passwordChangedAt: string | null;
+      passwordMaxAgeDays: number;
+      passwordExpired: boolean;
     };
   }
 }
@@ -25,5 +28,8 @@ declare module "next-auth/jwt" {
     canViewChangelog: boolean;
     canViewAllReports: boolean;
     canEditAllReports: boolean;
+    passwordChangedAt: string | null;
+    passwordMaxAgeDays: number;
+    passwordExpired: boolean;
   }
 }

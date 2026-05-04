@@ -4,6 +4,11 @@ import { compare } from "bcryptjs";
 import { db } from "./db";
 import { users } from "./schema";
 import { eq } from "drizzle-orm";
+import {
+  DEFAULT_PASSWORD_MAX_AGE_DAYS,
+  isPasswordExpired,
+  normalizePasswordMaxAgeDays,
+} from "./password-policy";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -54,6 +59,14 @@ export const authOptions: NextAuthOptions = {
             canViewChangelog: user.canViewChangelog,
             canViewAllReports: user.canViewAllReports,
             canEditAllReports: user.canEditAllReports,
+            passwordChangedAt: user.passwordChangedAt?.toISOString() ?? null,
+            passwordMaxAgeDays: normalizePasswordMaxAgeDays(
+              user.passwordMaxAgeDays
+            ),
+            passwordExpired: isPasswordExpired(
+              user.passwordChangedAt,
+              user.passwordMaxAgeDays
+            ),
           };
         } catch (error) {
           console.error("[Auth] Error during authorization:", error);
@@ -73,6 +86,9 @@ export const authOptions: NextAuthOptions = {
           canViewChangelog: boolean;
           canViewAllReports: boolean;
           canEditAllReports: boolean;
+          passwordChangedAt: string | null;
+          passwordMaxAgeDays: number;
+          passwordExpired: boolean;
         };
         token.role = u.role;
         token.canEdit = u.canEdit;
@@ -80,6 +96,9 @@ export const authOptions: NextAuthOptions = {
         token.canViewChangelog = u.canViewChangelog;
         token.canViewAllReports = u.canViewAllReports;
         token.canEditAllReports = u.canEditAllReports;
+        token.passwordChangedAt = u.passwordChangedAt;
+        token.passwordMaxAgeDays = u.passwordMaxAgeDays;
+        token.passwordExpired = u.passwordExpired;
       }
       return token;
     },
@@ -92,6 +111,12 @@ export const authOptions: NextAuthOptions = {
         session.user.canViewChangelog = token.canViewChangelog as boolean;
         session.user.canViewAllReports = token.canViewAllReports as boolean;
         session.user.canEditAllReports = token.canEditAllReports as boolean;
+        session.user.passwordChangedAt =
+          (token.passwordChangedAt as string | null) ?? null;
+        session.user.passwordMaxAgeDays =
+          (token.passwordMaxAgeDays as number | undefined) ??
+          DEFAULT_PASSWORD_MAX_AGE_DAYS;
+        session.user.passwordExpired = Boolean(token.passwordExpired);
       }
       return session;
     },

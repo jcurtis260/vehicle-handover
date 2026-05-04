@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./theme-toggle";
+import { PasswordButton } from "./password-button";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -77,7 +78,10 @@ export function Sidebar() {
               {session?.user?.email}
             </p>
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <PasswordButton />
+            <ThemeToggle />
+          </div>
         </div>
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}

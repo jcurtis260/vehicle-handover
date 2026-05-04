@@ -15,6 +15,12 @@ import {
   renameVehicleModel,
 } from "@/lib/actions/vehicle-catalog";
 import {
+  DEFAULT_PASSWORD_MAX_AGE_DAYS,
+  MAX_PASSWORD_MAX_AGE_DAYS,
+  MIN_PASSWORD_MAX_AGE_DAYS,
+  normalizePasswordMaxAgeDays,
+} from "@/lib/password-policy";
+import {
   UserPlus,
   Trash2,
   Loader2,
@@ -37,6 +43,8 @@ interface UserItem {
   canViewChangelog: boolean;
   canViewAllReports: boolean;
   canEditAllReports: boolean;
+  passwordChangedAt: Date | null;
+  passwordMaxAgeDays: number;
   lastLoginAt: Date | null;
   createdAt: Date;
 }
@@ -55,6 +63,23 @@ interface VehicleMakeItem {
 
 type CatalogSortMode = "alpha" | "models_desc" | "models_asc";
 const CATALOG_PREFS_KEY = "settingsVehicleCatalogPrefsV1";
+
+function getPasswordStatus(
+  passwordChangedAt: Date | null,
+  passwordMaxAgeDays: number
+) {
+  if (!passwordChangedAt) {
+    return { label: "Never", expired: true };
+  }
+
+  const ageDays = Math.floor(
+    (Date.now() - new Date(passwordChangedAt).getTime()) / (24 * 60 * 60 * 1000)
+  );
+  const maxAgeDays = normalizePasswordMaxAgeDays(passwordMaxAgeDays);
+  const expired = ageDays >= maxAgeDays;
+  const label = ageDays === 0 ? "Today" : `${ageDays} day${ageDays === 1 ? "" : "s"} ago`;
+  return { label, expired };
+}
 
 export function SettingsClient({
   initialUsers,
@@ -88,6 +113,9 @@ export function SettingsClient({
   const [editCanViewChangelog, setEditCanViewChangelog] = useState(false);
   const [editCanViewAllReports, setEditCanViewAllReports] = useState(false);
   const [editCanEditAllReports, setEditCanEditAllReports] = useState(false);
+  const [editPasswordMaxAgeDays, setEditPasswordMaxAgeDays] = useState(
+    DEFAULT_PASSWORD_MAX_AGE_DAYS
+  );
   const [editError, setEditError] = useState("");
 
   // Vehicle catalog state
@@ -190,18 +218,38 @@ export function SettingsClient({
   ]);
 
   function handleAdd() {
-    if (!addName || !addEmail || !addPassword) return;
+    const name = addName.trim();
+    const email = addEmail.trim().toLowerCase();
+
+    if (!name || !email || !addPassword) {
+      setAddError("Name, email, and password are required.");
+      return;
+    }
     setAddError("");
 
     startTransition(async () => {
       try {
         const user = await createUser({
-          name: addName,
-          email: addEmail,
+          name,
+          email,
           password: addPassword,
           role: addRole,
         });
-        setUsers((prev) => [...prev, { ...user, canEdit: false, canDelete: false, canViewChangelog: false, canViewAllReports: false, canEditAllReports: false, lastLoginAt: null, createdAt: new Date() }]);
+        setUsers((prev) => [
+          ...prev,
+          {
+            ...user,
+            canEdit: false,
+            canDelete: false,
+            canViewChangelog: false,
+            canViewAllReports: false,
+            canEditAllReports: false,
+            passwordChangedAt: new Date(),
+            passwordMaxAgeDays: DEFAULT_PASSWORD_MAX_AGE_DAYS,
+            lastLoginAt: null,
+            createdAt: new Date(),
+          },
+        ]);
         setShowAdd(false);
         setAddName("");
         setAddEmail("");
@@ -226,6 +274,9 @@ export function SettingsClient({
     setEditCanViewChangelog(user.canViewChangelog);
     setEditCanViewAllReports(user.canViewAllReports);
     setEditCanEditAllReports(user.canEditAllReports);
+    setEditPasswordMaxAgeDays(
+      normalizePasswordMaxAgeDays(user.passwordMaxAgeDays)
+    );
     setEditError("");
   }
 
@@ -240,6 +291,8 @@ export function SettingsClient({
     startTransition(async () => {
       try {
         const current = users.find((u) => u.id === userId);
+        const normalizedEditName = editName.trim();
+        const normalizedEditEmail = editEmail.trim().toLowerCase();
         const updates: {
           name?: string;
           email?: string;
@@ -250,10 +303,11 @@ export function SettingsClient({
           canViewChangelog?: boolean;
           canViewAllReports?: boolean;
           canEditAllReports?: boolean;
+          passwordMaxAgeDays?: number;
         } = {};
 
-        if (editName !== current?.name) updates.name = editName;
-        if (editEmail !== current?.email) updates.email = editEmail;
+        if (normalizedEditName !== current?.name) updates.name = normalizedEditName;
+        if (normalizedEditEmail !== current?.email) updates.email = normalizedEditEmail;
         if (editRole !== current?.role) updates.role = editRole;
         if (editPassword) updates.password = editPassword;
         if (editCanEdit !== current?.canEdit) updates.canEdit = editCanEdit;
@@ -261,22 +315,30 @@ export function SettingsClient({
         if (editCanViewChangelog !== current?.canViewChangelog) updates.canViewChangelog = editCanViewChangelog;
         if (editCanViewAllReports !== current?.canViewAllReports) updates.canViewAllReports = editCanViewAllReports;
         if (editCanEditAllReports !== current?.canEditAllReports) updates.canEditAllReports = editCanEditAllReports;
+        if (editPasswordMaxAgeDays !== current?.passwordMaxAgeDays) {
+          updates.passwordMaxAgeDays = editPasswordMaxAgeDays;
+        }
 
         if (Object.keys(updates).length > 0) {
+          const passwordUpdated = Boolean(updates.password);
           await updateUser(userId, updates);
           setUsers((prev) =>
             prev.map((u) =>
               u.id === userId
                 ? {
                     ...u,
-                    name: editName || u.name,
-                    email: editEmail || u.email,
+                    name: normalizedEditName || u.name,
+                    email: normalizedEditEmail || u.email,
                     role: editRole || u.role,
                     canEdit: editCanEdit,
                     canDelete: editCanDelete,
                     canViewChangelog: editCanViewChangelog,
                     canViewAllReports: editCanViewAllReports,
                     canEditAllReports: editCanEditAllReports,
+                    passwordChangedAt: passwordUpdated
+                      ? new Date()
+                      : u.passwordChangedAt,
+                    passwordMaxAgeDays: editPasswordMaxAgeDays,
                   }
                 : u
             )
@@ -520,6 +582,7 @@ export function SettingsClient({
                   value={addName}
                   onChange={(e) => setAddName(e.target.value)}
                   placeholder="Full name"
+                  autoComplete="name"
                 />
               </div>
               <div className="space-y-1.5">
@@ -529,6 +592,10 @@ export function SettingsClient({
                   value={addEmail}
                   onChange={(e) => setAddEmail(e.target.value)}
                   placeholder="email@example.com"
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                 />
               </div>
               <div className="space-y-1.5">
@@ -538,6 +605,10 @@ export function SettingsClient({
                   value={addPassword}
                   onChange={(e) => setAddPassword(e.target.value)}
                   placeholder="Initial password"
+                  autoComplete="new-password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                 />
               </div>
               <div className="space-y-1.5">
@@ -554,11 +625,11 @@ export function SettingsClient({
                 </select>
               </div>
             </div>
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setShowAdd(false)}>
+            <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowAdd(false)} className="min-h-[44px]">
                 Cancel
               </Button>
-              <Button onClick={handleAdd} disabled={isPending}>
+              <Button onClick={handleAdd} disabled={isPending} className="min-h-[44px]">
                 {isPending && (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 )}
@@ -589,7 +660,12 @@ export function SettingsClient({
         {usersSectionOpen && (
           <CardContent id="settings-users-section">
             <div className="space-y-3">
-              {users.map((user) => (
+              {users.map((user) => {
+                const passwordStatus = getPasswordStatus(
+                  user.passwordChangedAt,
+                  user.passwordMaxAgeDays
+                );
+                return (
                 <div
                   key={user.id}
                   className="rounded-lg border border-border overflow-hidden"
@@ -621,6 +697,7 @@ export function SettingsClient({
                           <Input
                             value={editName}
                             onChange={(e) => setEditName(e.target.value)}
+                            autoComplete="name"
                           />
                         </div>
                         <div className="space-y-1">
@@ -631,6 +708,10 @@ export function SettingsClient({
                             type="email"
                             value={editEmail}
                             onChange={(e) => setEditEmail(e.target.value)}
+                            autoComplete="email"
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            spellCheck={false}
                           />
                         </div>
                         <div className="space-y-1">
@@ -642,6 +723,10 @@ export function SettingsClient({
                             value={editPassword}
                             onChange={(e) => setEditPassword(e.target.value)}
                             placeholder="Leave blank to keep current"
+                            autoComplete="new-password"
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            spellCheck={false}
                           />
                         </div>
                         <div className="space-y-1">
@@ -658,6 +743,24 @@ export function SettingsClient({
                             <option value="user">User</option>
                             <option value="admin">Admin</option>
                           </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-muted-foreground">
+                            Password expiry days
+                          </label>
+                          <Input
+                            type="number"
+                            min={MIN_PASSWORD_MAX_AGE_DAYS}
+                            max={MAX_PASSWORD_MAX_AGE_DAYS}
+                            value={editPasswordMaxAgeDays}
+                            onChange={(e) =>
+                              setEditPasswordMaxAgeDays(
+                                normalizePasswordMaxAgeDays(
+                                  Number.parseInt(e.target.value || "0", 10)
+                                )
+                              )
+                            }
+                          />
                         </div>
                       </div>
 
@@ -819,6 +922,17 @@ export function SettingsClient({
                                 })
                               : "Never"}
                           </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Password changed: {passwordStatus.label}
+                            {passwordStatus.expired && (
+                              <span className="ml-2 inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                                Expired
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Password expires every {user.passwordMaxAgeDays} days
+                          </p>
                         </div>
                       </div>
 
@@ -845,7 +959,8 @@ export function SettingsClient({
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         )}

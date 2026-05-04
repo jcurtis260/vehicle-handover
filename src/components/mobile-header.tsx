@@ -3,6 +3,7 @@
 import { useSession, signOut } from "next-auth/react";
 import { Car, LogOut } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
+import { PasswordButton } from "./password-button";
 
 export function MobileHeader() {
   const { data: session } = useSession();
@@ -17,6 +18,7 @@ export function MobileHeader() {
         <span className="text-xs text-muted-foreground hidden sm:block">
           {session?.user?.name}
         </span>
+        <PasswordButton />
         <ThemeToggle />
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}
