@@ -803,17 +803,36 @@ export async function listHandovers(limit = 20, offset = 0) {
   const session = await requireActionSession();
 
   const canSeeAll = canViewAllReports(session.user);
-  const conditions = canSeeAll ? undefined : eq(handovers.userId, session.user.id);
+  const conditions = canSeeAll
+    ? undefined
+    : eq(handovers.userId, session.user.id);
 
-  const results = await db.query.handovers.findMany({
-    where: conditions,
-    with: { vehicle: true, user: true },
-    orderBy: [desc(handovers.createdAt)],
-    limit,
-    offset,
-  });
-
-  return results;
+  return db
+    .select({
+      id: handovers.id,
+      date: handovers.date,
+      status: handovers.status,
+      type: handovers.type,
+      formTemplateName: formTemplates.name,
+      archivedTemplateName: sql<string | null>`(
+        SELECT TRIM(BOTH '"' FROM ${handoverFormResponses.valueJson}::text)
+        FROM ${handoverFormResponses}
+        WHERE ${handoverFormResponses.handoverId} = ${handovers.id}
+          AND ${handoverFormResponses.questionKey} = ${TEMPLATE_NAME_META_KEY}
+        ORDER BY ${handoverFormResponses.createdAt} DESC
+        LIMIT 1
+      )`,
+      vehicleMake: vehicles.make,
+      vehicleModel: vehicles.model,
+      vehicleRegistration: vehicles.registration,
+    })
+    .from(handovers)
+    .innerJoin(vehicles, eq(handovers.vehicleId, vehicles.id))
+    .leftJoin(formTemplates, eq(handovers.templateId, formTemplates.id))
+    .where(conditions)
+    .orderBy(desc(handovers.createdAt))
+    .limit(limit)
+    .offset(offset);
 }
 
 export async function getHandoverStats() {

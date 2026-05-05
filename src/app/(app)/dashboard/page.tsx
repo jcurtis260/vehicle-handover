@@ -337,17 +337,21 @@ export default async function DashboardPage() {
                     <Car className="h-5 w-5 text-muted-foreground shrink-0" />
                     <div className="min-w-0">
                       <p className="font-medium truncate">
-                        {h.vehicle.make} {h.vehicle.model}
+                        {h.vehicleMake} {h.vehicleModel}
                       </p>
                       <p className="text-sm text-muted-foreground truncate">
-                        {h.vehicle.registration} &middot;{" "}
+                        {h.vehicleRegistration} &middot;{" "}
                         {new Date(h.date).toLocaleDateString()}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <Badge variant="outline" className="text-[10px]">
-                      {h.type === "delivery" ? "Delivery" : "Collection"}
+                      {h.type === "collection"
+                        ? "Collection"
+                        : h.type === "dynamic"
+                          ? h.formTemplateName || h.archivedTemplateName || "Deleted Form"
+                          : "Delivery"}
                     </Badge>
                     <Badge
                       variant={h.status === "completed" ? "success" : "warning"}
