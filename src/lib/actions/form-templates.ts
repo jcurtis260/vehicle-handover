@@ -5,6 +5,8 @@ import {
   formTemplateQuestions,
   formTemplates,
   handovers,
+  handoverFormResponses,
+  handoverPhotos,
 } from "@/lib/schema";
 import {
   and,
@@ -26,6 +28,7 @@ import {
 const MAX_NAME = 255;
 const MAX_LABEL = 255;
 const MAX_KEY = 100;
+const TEMPLATE_NAME_META_KEY = "__template_name";
 
 function isUndefinedColumnError(error: unknown) {
   if (!error || typeof error !== "object") return false;
@@ -503,8 +506,33 @@ export async function updateFormTemplate(
   revalidatePath("/handovers/new");
 }
 
-export async function deleteFormTemplate(templateId: string) {
+export async function deleteFormTemplate(
+  templateId: string,
+  options?: {
+    submissionHandling?: "block" | "keep_submissions" | "delete_submissions";
+  }
+): Promise<
+  | { ok: true; deletedHandovers: number }
+  | { ok: false; error: string }
+  | { ok: false; requiresDecision: true; submissionCount: number }
+> {
   await requireAdminSession();
+  const submissionHandling = options?.submissionHandling || "block";
+  const [template] = await db
+    .select({
+      id: formTemplates.id,
+      name: formTemplates.name,
+    })
+    .from(formTemplates)
+    .where(eq(formTemplates.id, templateId))
+    .limit(1);
+  if (!template) {
+    return {
+      ok: false,
+      error: "Form not found",
+    };
+  }
+
   let usageCount = 0;
   try {
     const [usage] = await db
@@ -513,18 +541,102 @@ export async function deleteFormTemplate(templateId: string) {
       .where(eq(handovers.templateId, templateId));
     usageCount = usage?.value || 0;
   } catch (error) {
-    if (!isSchemaCompatError(error)) {
-      console.error("[Forms] deleteFormTemplate usage check failed:", error);
-    }
+    console.error("[Forms] deleteFormTemplate usage check failed:", error);
+    return {
+      ok: false,
+      error: "Unable to verify submitted forms for this template. Please try again.",
+    };
   }
 
   if (usageCount > 0) {
-    throw new Error("Cannot delete a form that has existing handovers");
+    if (submissionHandling === "block") {
+      return {
+        ok: false,
+        requiresDecision: true,
+        submissionCount: usageCount,
+      };
+    }
+
+    const handoversForTemplate = await db
+      .select({ id: handovers.id })
+      .from(handovers)
+      .where(eq(handovers.templateId, templateId));
+
+    if (handoversForTemplate.length > 0) {
+      const handoverIds = handoversForTemplate.map((h) => h.id);
+
+      if (submissionHandling === "keep_submissions") {
+        await db
+          .delete(handoverFormResponses)
+          .where(
+            and(
+              inArray(handoverFormResponses.handoverId, handoverIds),
+              eq(handoverFormResponses.questionKey, TEMPLATE_NAME_META_KEY)
+            )
+          );
+
+        await db.insert(handoverFormResponses).values(
+          handoverIds.map((handoverId) => ({
+            handoverId,
+            questionId: null,
+            questionKey: TEMPLATE_NAME_META_KEY,
+            questionLabel: "Template Name",
+            questionType: "meta",
+            valueJson: template.name,
+          }))
+        );
+      }
+
+      if (submissionHandling === "delete_submissions") {
+        const photos = await db
+          .select({ blobUrl: handoverPhotos.blobUrl })
+          .from(handoverPhotos)
+          .where(inArray(handoverPhotos.handoverId, handoverIds));
+
+        if (photos.length > 0) {
+          try {
+            const { del } = await import("@vercel/blob");
+            await del(photos.map((photo) => photo.blobUrl));
+          } catch (err) {
+            console.error(
+              "[Forms] deleteFormTemplate failed to delete blob files:",
+              err
+            );
+          }
+        }
+
+        await db.delete(handovers).where(inArray(handovers.id, handoverIds));
+      }
+    }
+
+    if (
+      submissionHandling !== "keep_submissions" &&
+      submissionHandling !== "delete_submissions"
+    ) {
+      return {
+        ok: false,
+        error: "Invalid submission handling option",
+      };
+    }
   }
 
-  await db.delete(formTemplates).where(eq(formTemplates.id, templateId));
+  const deleted = await db
+    .delete(formTemplates)
+    .where(eq(formTemplates.id, templateId))
+    .returning({ id: formTemplates.id });
+  if (deleted.length === 0) return { ok: false, error: "Form not found" };
+
   revalidatePath("/forms");
   revalidatePath("/handovers/new");
+  revalidatePath("/dashboard");
+  revalidatePath("/search");
+  return {
+    ok: true,
+    deletedHandovers:
+      usageCount > 0 && submissionHandling === "delete_submissions"
+        ? usageCount
+        : 0,
+  };
 }
 
 export async function addFormQuestion(

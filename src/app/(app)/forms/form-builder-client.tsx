@@ -267,7 +267,60 @@ export function FormBuilderClient({ initialTemplates }: Props) {
     setTemplateError("");
     startTransition(async () => {
       try {
-        await deleteFormTemplate(templateId);
+        const result = await deleteFormTemplate(templateId, {
+          submissionHandling: "block",
+        });
+
+        if (!result.ok && "requiresDecision" in result && result.requiresDecision) {
+          const keepSubmitted = confirm(
+            `"${name}" has ${result.submissionCount} submitted form${
+              result.submissionCount === 1 ? "" : "s"
+            }.\n\nPress OK to keep submitted forms and delete only the template.\nPress Cancel to choose whether to delete submitted forms as well.`
+          );
+
+          if (keepSubmitted) {
+            const keepResult = await deleteFormTemplate(templateId, {
+              submissionHandling: "keep_submissions",
+            });
+            if (!keepResult.ok) {
+              setTemplateError(
+                "error" in keepResult
+                  ? keepResult.error
+                  : "Failed to delete form"
+              );
+              return;
+            }
+          } else {
+            const deleteSubmitted = confirm(
+              `Delete template "${name}" and all ${result.submissionCount} submitted form${
+                result.submissionCount === 1 ? "" : "s"
+              }?\n\nThis permanently deletes related reports and photos. Press Cancel to abort.`
+            );
+
+            if (!deleteSubmitted) {
+              setTemplateError("Delete cancelled.");
+              return;
+            }
+
+            const deleteResult = await deleteFormTemplate(templateId, {
+              submissionHandling: "delete_submissions",
+            });
+            if (!deleteResult.ok) {
+              setTemplateError(
+                "error" in deleteResult
+                  ? deleteResult.error
+                  : "Failed to delete form"
+              );
+              return;
+            }
+          }
+        } else if (!result.ok) {
+          setTemplateError(
+            "error" in result ? result.error : "Failed to delete form"
+          );
+          return;
+        }
+
         setTemplates((prev) => prev.filter((template) => template.id !== templateId));
         if (openTemplateId === templateId) setOpenTemplateId(null);
       } catch (error) {

@@ -95,6 +95,7 @@ interface HandoverInput {
 
 const VALID_STATUSES = ["draft", "completed"] as const;
 const VALID_TYPES = ["collection", "delivery", "dynamic"] as const;
+const TEMPLATE_NAME_META_KEY = "__template_name";
 const VALID_CATEGORIES = [
   "exterior", "interior", "damage", "tyres", "other", "v5", "signature",
 ] as const;
@@ -1184,7 +1185,8 @@ export async function getHandoverFilterOptions() {
   const canSeeAll = canViewAllReports(session.user);
   const userFilter = canSeeAll ? sql`1=1` : eq(handovers.userId, session.user.id);
 
-  const [makesResult, modelsResult, inspectorsResult] = await Promise.all([
+  const [makesResult, modelsResult, inspectorsResult, formTemplatesResult] =
+    await Promise.all([
     db
       .selectDistinct({ make: vehicles.make })
       .from(vehicles)
@@ -1206,12 +1208,24 @@ export async function getHandoverFilterOptions() {
           .innerJoin(handovers, eq(handovers.userId, users.id))
           .orderBy(asc(users.name))
       : Promise.resolve([]),
+
+    db
+      .select({
+        id: formTemplates.id,
+        name: formTemplates.name,
+      })
+      .from(formTemplates)
+      .orderBy(asc(formTemplates.name)),
   ]);
 
   return {
     makes: makesResult.map((r) => r.make),
     models: modelsResult.map((r) => r.model),
     inspectors: inspectorsResult.map((r) => ({ id: r.id, name: r.name })),
+    formTemplates: formTemplatesResult.map((template) => ({
+      id: template.id,
+      name: template.name,
+    })),
     isAdmin: isAdmin || canSeeAll,
   };
 }
@@ -1222,6 +1236,7 @@ export interface HandoverFilters {
   model?: string;
   status?: "draft" | "completed";
   type?: "collection" | "delivery" | "dynamic";
+  templateId?: string;
   inspectorId?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -1277,6 +1292,9 @@ export async function listFilteredHandovers(
   if (filters.type) {
     conditions.push(eq(handovers.type, filters.type));
   }
+  if (filters.templateId) {
+    conditions.push(eq(handovers.templateId, filters.templateId));
+  }
 
   if (filters.inspectorId && (isAdmin || canSeeAll)) {
     conditions.push(eq(handovers.userId, filters.inspectorId));
@@ -1329,6 +1347,15 @@ export async function listFilteredHandovers(
         name: handovers.name,
         status: handovers.status,
         type: handovers.type,
+        formTemplateName: formTemplates.name,
+        archivedTemplateName: sql<string | null>`(
+          SELECT TRIM(BOTH '"' FROM ${handoverFormResponses.valueJson}::text)
+          FROM ${handoverFormResponses}
+          WHERE ${handoverFormResponses.handoverId} = ${handovers.id}
+            AND ${handoverFormResponses.questionKey} = ${TEMPLATE_NAME_META_KEY}
+          ORDER BY ${handoverFormResponses.createdAt} DESC
+          LIMIT 1
+        )`,
         mileage: handovers.mileage,
         fuelType: handovers.fuelType,
         collectionOutcome: handovers.collectionOutcome,
@@ -1339,6 +1366,7 @@ export async function listFilteredHandovers(
       })
       .from(handovers)
       .innerJoin(vehicles, eq(handovers.vehicleId, vehicles.id))
+      .leftJoin(formTemplates, eq(handovers.templateId, formTemplates.id))
       .leftJoin(handoverPhotos, eq(handoverPhotos.handoverId, handovers.id))
       .where(whereClause)
       .groupBy(
@@ -1347,6 +1375,7 @@ export async function listFilteredHandovers(
         handovers.name,
         handovers.status,
         handovers.type,
+        formTemplates.name,
         handovers.mileage,
         handovers.fuelType,
         handovers.collectionOutcome,

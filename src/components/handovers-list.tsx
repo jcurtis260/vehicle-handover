@@ -35,6 +35,7 @@ type FilterOptions = {
   makes: string[];
   models: string[];
   inspectors: { id: string; name: string }[];
+  formTemplates: { id: string; name: string }[];
   isAdmin: boolean;
 };
 
@@ -77,6 +78,13 @@ function HandoverDataCell({
   row: ResultRow;
   modelAsLink: boolean;
 }) {
+  const typeLabel =
+    row.type === "collection"
+      ? "Collection"
+      : row.type === "dynamic"
+        ? row.formTemplateName || row.archivedTemplateName || "Deleted Form"
+        : "Delivery";
+
   switch (col) {
     case "make":
       return (
@@ -113,11 +121,7 @@ function HandoverDataCell({
     case "type":
       return (
         <Badge variant="outline" className="text-[10px]">
-          {row.type === "delivery"
-            ? "Delivery"
-            : row.type === "dynamic"
-              ? "Dynamic"
-              : "Collection"}
+          {typeLabel}
         </Badge>
       );
     case "status":
@@ -293,9 +297,14 @@ export function HandoversList({
     filters.model ||
     filters.status ||
     filters.type ||
+    filters.templateId ||
     filters.inspectorId ||
     filters.dateFrom ||
     filters.dateTo;
+
+  const selectedTypeFilterValue = filters.templateId
+    ? `template:${filters.templateId}`
+    : filters.type || "";
 
   function SortIcon({ col }: { col: HandoverFilters["sortBy"] }) {
     if (filters.sortBy !== col) {
@@ -504,23 +513,44 @@ export function HandoversList({
                 Type
               </label>
               <select
-                value={filters.type || ""}
-                onChange={(e) =>
-                  setFilters((f) => ({
-                    ...f,
-                    type: (e.target.value || undefined) as
-                      | "collection"
-                      | "delivery"
-                      | "dynamic"
-                      | undefined,
-                  }))
-                }
+                value={selectedTypeFilterValue}
+                onChange={(e) => {
+                  const nextValue = e.target.value;
+                  if (!nextValue) {
+                    setFilters((f) => ({
+                      ...f,
+                      type: undefined,
+                      templateId: undefined,
+                    }));
+                    return;
+                  }
+                  if (nextValue === "collection" || nextValue === "delivery") {
+                    setFilters((f) => ({
+                      ...f,
+                      type: nextValue,
+                      templateId: undefined,
+                    }));
+                    return;
+                  }
+                  if (nextValue.startsWith("template:")) {
+                    const templateId = nextValue.slice("template:".length);
+                    setFilters((f) => ({
+                      ...f,
+                      type: "dynamic",
+                      templateId: templateId || undefined,
+                    }));
+                  }
+                }}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <option value="">All Types</option>
                 <option value="collection">Collection</option>
                 <option value="delivery">Delivery</option>
-                <option value="dynamic">Dynamic</option>
+                {filterOptions.formTemplates.map((template) => (
+                  <option key={template.id} value={`template:${template.id}`}>
+                    {template.name}
+                  </option>
+                ))}
               </select>
             </div>
 
