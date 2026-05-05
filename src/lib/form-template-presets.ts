@@ -18,6 +18,51 @@ export interface FormTemplatePreset {
 
 export const FORM_TEMPLATE_PRESETS: FormTemplatePreset[] = [
   {
+    id: "purchased-vehicle-delivery-checklist",
+    name: "Purchased Vehicle Delivery Checklist",
+    description:
+      "Checklist for delivering a purchased vehicle to the customer.",
+    questions: [
+      {
+        key: "liquid_kit_or_spare_wheel_tools",
+        label: "Liquid kit or spare wheel & tools",
+        type: "boolean",
+        required: true,
+      },
+      {
+        key: "spare_key",
+        label: "Spare key",
+        type: "boolean",
+        required: true,
+      },
+      {
+        key: "locking_wheel_nut",
+        label: "Locking wheel nut",
+        type: "boolean",
+        required: true,
+      },
+      {
+        key: "mats",
+        label: "Mats",
+        type: "boolean",
+        required: true,
+      },
+      {
+        key: "load_cover_parcel_shelf",
+        label: "Load cover (parcel shelf)",
+        type: "boolean",
+        required: true,
+      },
+      {
+        key: "paperwork_sales_envelope_v5_vehicle_photo",
+        label:
+          "Paperwork / sales envelope, including V5, photo of the vehicle",
+        type: "boolean",
+        required: true,
+      },
+    ],
+  },
+  {
     id: "purchase-delivery-confirmation",
     name: "Vehicle Purchase & Delivery Confirmation",
     description:
