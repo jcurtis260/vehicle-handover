@@ -182,7 +182,9 @@ export async function listFormTemplates() {
       questions: byTemplate.get(template.id) || [],
     })) as DynamicFormTemplateDetails[];
   } catch (error) {
-    if (!isSchemaCompatError(error)) throw error;
+    if (!isSchemaCompatError(error)) {
+      console.error("[Forms] listFormTemplates primary query failed:", error);
+    }
 
     // Compatibility fallback for partially-migrated environments.
     let templates: Array<{
@@ -202,7 +204,12 @@ export async function listFormTemplates() {
         .from(formTemplates)
         .orderBy(asc(formTemplates.name));
     } catch (templatesError) {
-      if (!isSchemaCompatError(templatesError)) throw templatesError;
+      if (!isSchemaCompatError(templatesError)) {
+        console.error(
+          "[Forms] listFormTemplates fallback template query failed:",
+          templatesError
+        );
+      }
       return [];
     }
 
@@ -229,7 +236,12 @@ export async function listFormTemplates() {
           asc(formTemplateQuestions.id)
         );
     } catch (questionsError) {
-      if (!isSchemaCompatError(questionsError)) throw questionsError;
+      if (!isSchemaCompatError(questionsError)) {
+        console.error(
+          "[Forms] listFormTemplates fallback question query failed:",
+          questionsError
+        );
+      }
     }
 
     const questionsByTemplate = new Map<
@@ -277,7 +289,9 @@ export async function listActiveFormTemplates() {
       .where(and(eq(formTemplates.isActive, true), eq(formTemplates.isDraft, false)))
       .orderBy(asc(formTemplates.name));
   } catch (error) {
-    if (!isSchemaCompatError(error)) throw error;
+    if (!isSchemaCompatError(error)) {
+      console.error("[Forms] listActiveFormTemplates primary query failed:", error);
+    }
 
     let templates: Array<{
       id: string;
@@ -296,7 +310,12 @@ export async function listActiveFormTemplates() {
         .from(formTemplates)
         .orderBy(asc(formTemplates.name));
     } catch (templatesError) {
-      if (!isSchemaCompatError(templatesError)) throw templatesError;
+      if (!isSchemaCompatError(templatesError)) {
+        console.error(
+          "[Forms] listActiveFormTemplates fallback template query failed:",
+          templatesError
+        );
+      }
       return [];
     }
 
@@ -339,7 +358,9 @@ export async function getFormTemplateDetails(
       questions,
     } as DynamicFormTemplateDetails;
   } catch (error) {
-    if (!isSchemaCompatError(error)) throw error;
+    if (!isSchemaCompatError(error)) {
+      console.error("[Forms] getFormTemplateDetails primary query failed:", error);
+    }
 
     let template:
       | {
@@ -361,7 +382,12 @@ export async function getFormTemplateDetails(
         .where(eq(formTemplates.id, templateId))
         .limit(1);
     } catch (templateError) {
-      if (!isSchemaCompatError(templateError)) throw templateError;
+      if (!isSchemaCompatError(templateError)) {
+        console.error(
+          "[Forms] getFormTemplateDetails fallback template query failed:",
+          templateError
+        );
+      }
       return null;
     }
 
@@ -387,7 +413,12 @@ export async function getFormTemplateDetails(
         .where(eq(formTemplateQuestions.templateId, template.id))
         .orderBy(asc(formTemplateQuestions.id));
     } catch (questionsError) {
-      if (!isSchemaCompatError(questionsError)) throw questionsError;
+      if (!isSchemaCompatError(questionsError)) {
+        console.error(
+          "[Forms] getFormTemplateDetails fallback question query failed:",
+          questionsError
+        );
+      }
     }
 
     return {
@@ -482,7 +513,9 @@ export async function deleteFormTemplate(templateId: string) {
       .where(eq(handovers.templateId, templateId));
     usageCount = usage?.value || 0;
   } catch (error) {
-    if (!isSchemaCompatError(error)) throw error;
+    if (!isSchemaCompatError(error)) {
+      console.error("[Forms] deleteFormTemplate usage check failed:", error);
+    }
   }
 
   if (usageCount > 0) {
