@@ -118,19 +118,31 @@ export async function createUser(input: {
 }) {
   const session = await getServerSession(authOptions);
   if (!session?.user || session.user.role !== "admin") {
-    throw new Error("Forbidden");
+    return {
+      ok: false as const,
+      error: "You do not have permission to create users.",
+    };
   }
 
   const trimmedName = input.name.trim();
   const normalizedEmail = input.email.trim().toLowerCase();
 
-  if (!trimmedName || trimmedName.length > 255) throw new Error("Invalid name");
-  if (!normalizedEmail || !EMAIL_REGEX.test(normalizedEmail) || normalizedEmail.length > 254)
-    throw new Error("Invalid email");
-  if (!input.password || input.password.length < 8 || input.password.length > 128)
-    throw new Error("Password must be 8-128 characters");
-  if (!["admin", "user"].includes(input.role))
-    throw new Error("Invalid role");
+  if (!trimmedName || trimmedName.length > 255) {
+    return { ok: false as const, error: "Name is required (max 255 characters)." };
+  }
+  if (
+    !normalizedEmail ||
+    !EMAIL_REGEX.test(normalizedEmail) ||
+    normalizedEmail.length > 254
+  ) {
+    return { ok: false as const, error: "Enter a valid email address." };
+  }
+  if (!input.password || input.password.length < 8 || input.password.length > 128) {
+    return { ok: false as const, error: "Password must be 8-128 characters." };
+  }
+  if (!["admin", "user"].includes(input.role)) {
+    return { ok: false as const, error: "Invalid role selected." };
+  }
 
   const existing = await db
     .select()
@@ -139,30 +151,48 @@ export async function createUser(input: {
     .limit(1);
 
   if (existing.length > 0) {
-    throw new Error("A user with this email already exists");
+    return {
+      ok: false as const,
+      error: "A user with this email already exists.",
+    };
   }
 
   const passwordHash = await hash(input.password, 12);
 
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: normalizedEmail,
-      name: trimmedName,
-      passwordHash,
-      passwordChangedAt: new Date(),
-      passwordMaxAgeDays: DEFAULT_PASSWORD_MAX_AGE_DAYS,
-      role: input.role,
-    })
-    .returning({
-      id: users.id,
-      email: users.email,
-      name: users.name,
-      role: users.role,
-    });
+  try {
+    const [user] = await db
+      .insert(users)
+      .values({
+        email: normalizedEmail,
+        name: trimmedName,
+        passwordHash,
+        passwordChangedAt: new Date(),
+        passwordMaxAgeDays: DEFAULT_PASSWORD_MAX_AGE_DAYS,
+        role: input.role,
+      })
+      .returning({
+        id: users.id,
+        email: users.email,
+        name: users.name,
+        role: users.role,
+      });
 
-  revalidatePath("/settings");
-  return user;
+    revalidatePath("/settings");
+    return { ok: true as const, user };
+  } catch (error) {
+    const message = (error as { message?: string } | null)?.message || "";
+    if (/duplicate key|unique constraint/i.test(message)) {
+      return {
+        ok: false as const,
+        error: "A user with this email already exists.",
+      };
+    }
+    console.error("[Users] createUser failed:", error);
+    return {
+      ok: false as const,
+      error: "Unable to create user right now. Please try again.",
+    };
+  }
 }
 
 export async function updateUser(

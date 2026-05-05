@@ -63,6 +63,7 @@ interface VehicleMakeItem {
 
 type CatalogSortMode = "alpha" | "models_desc" | "models_asc";
 const CATALOG_PREFS_KEY = "settingsVehicleCatalogPrefsV1";
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function getPasswordStatus(
   passwordChangedAt: Date | null,
@@ -225,16 +226,29 @@ export function SettingsClient({
       setAddError("Name, email, and password are required.");
       return;
     }
+    if (!EMAIL_REGEX.test(email)) {
+      setAddError("Enter a valid email address.");
+      return;
+    }
+    if (addPassword.length < 8 || addPassword.length > 128) {
+      setAddError("Password must be 8-128 characters.");
+      return;
+    }
     setAddError("");
 
     startTransition(async () => {
       try {
-        const user = await createUser({
+        const result = await createUser({
           name,
           email,
           password: addPassword,
           role: addRole,
         });
+        if (!result.ok) {
+          setAddError(result.error);
+          return;
+        }
+        const user = result.user;
         setUsers((prev) => [
           ...prev,
           {
@@ -257,7 +271,7 @@ export function SettingsClient({
         setAddRole("user");
       } catch (err) {
         setAddError(
-          err instanceof Error ? err.message : "Failed to create user"
+          "Unable to create user right now. Please try again."
         );
       }
     });
