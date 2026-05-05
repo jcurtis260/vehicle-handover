@@ -27,6 +27,44 @@ const MAX_NAME = 255;
 const MAX_LABEL = 255;
 const MAX_KEY = 100;
 
+function isUndefinedColumnError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const maybeCode = (error as { code?: unknown }).code;
+  if (maybeCode === "42703") return true;
+
+  const maybeCauseCode = (
+    error as { cause?: { code?: unknown } }
+  ).cause?.code;
+  if (maybeCauseCode === "42703") return true;
+
+  const message =
+    (error as { message?: string }).message ||
+    (error as { cause?: { message?: string } }).cause?.message ||
+    "";
+  return /column .* does not exist/i.test(message);
+}
+
+function isUndefinedTableError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const maybeCode = (error as { code?: unknown }).code;
+  if (maybeCode === "42P01") return true;
+
+  const maybeCauseCode = (
+    error as { cause?: { code?: unknown } }
+  ).cause?.code;
+  if (maybeCauseCode === "42P01") return true;
+
+  const message =
+    (error as { message?: string }).message ||
+    (error as { cause?: { message?: string } }).cause?.message ||
+    "";
+  return /relation .* does not exist/i.test(message);
+}
+
+function isSchemaCompatError(error: unknown) {
+  return isUndefinedColumnError(error) || isUndefinedTableError(error);
+}
+
 async function requireAdminSession() {
   const session = await getServerSession(authOptions);
   if (!session?.user || session.user.role !== "admin") {
@@ -118,48 +156,158 @@ function validateQuestionInput(input: {
 
 export async function listFormTemplates() {
   await requireAdminSession();
-  const templates = await db
-    .select()
-    .from(formTemplates)
-    .orderBy(asc(formTemplates.name));
+  try {
+    const templates = await db
+      .select()
+      .from(formTemplates)
+      .orderBy(asc(formTemplates.name));
 
-  const questions = await db
-    .select()
-    .from(formTemplateQuestions)
-    .orderBy(
-      asc(formTemplateQuestions.templateId),
-      asc(formTemplateQuestions.position)
-    );
+    const questions = await db
+      .select()
+      .from(formTemplateQuestions)
+      .orderBy(
+        asc(formTemplateQuestions.templateId),
+        asc(formTemplateQuestions.position)
+      );
 
-  const byTemplate = new Map<string, typeof questions>();
-  for (const question of questions) {
-    const bucket = byTemplate.get(question.templateId) || [];
-    bucket.push(question);
-    byTemplate.set(question.templateId, bucket);
+    const byTemplate = new Map<string, typeof questions>();
+    for (const question of questions) {
+      const bucket = byTemplate.get(question.templateId) || [];
+      bucket.push(question);
+      byTemplate.set(question.templateId, bucket);
+    }
+
+    return templates.map((template) => ({
+      ...template,
+      questions: byTemplate.get(template.id) || [],
+    })) as DynamicFormTemplateDetails[];
+  } catch (error) {
+    if (!isSchemaCompatError(error)) throw error;
+
+    // Compatibility fallback for partially-migrated environments.
+    let templates: Array<{
+      id: string;
+      name: string;
+      version: number;
+      createdAt: Date;
+    }> = [];
+    try {
+      templates = await db
+        .select({
+          id: formTemplates.id,
+          name: formTemplates.name,
+          version: formTemplates.version,
+          createdAt: formTemplates.createdAt,
+        })
+        .from(formTemplates)
+        .orderBy(asc(formTemplates.name));
+    } catch (templatesError) {
+      if (!isSchemaCompatError(templatesError)) throw templatesError;
+      return [];
+    }
+
+    let minimalQuestions: Array<{
+      id: string;
+      templateId: string;
+      key: string;
+      label: string;
+      type: string;
+    }> = [];
+
+    try {
+      minimalQuestions = await db
+        .select({
+          id: formTemplateQuestions.id,
+          templateId: formTemplateQuestions.templateId,
+          key: formTemplateQuestions.key,
+          label: formTemplateQuestions.label,
+          type: formTemplateQuestions.type,
+        })
+        .from(formTemplateQuestions)
+        .orderBy(
+          asc(formTemplateQuestions.templateId),
+          asc(formTemplateQuestions.id)
+        );
+    } catch (questionsError) {
+      if (!isSchemaCompatError(questionsError)) throw questionsError;
+    }
+
+    const questionsByTemplate = new Map<
+      string,
+      DynamicFormTemplateDetails["questions"]
+    >();
+    for (const question of minimalQuestions) {
+      const bucket = questionsByTemplate.get(question.templateId) || [];
+      bucket.push({
+        ...question,
+        required: false,
+        helpText: null,
+        optionsJson: null,
+        position: bucket.length,
+      });
+      questionsByTemplate.set(question.templateId, bucket);
+    }
+
+    return templates.map((template) => ({
+      ...template,
+      isDraft: false,
+      description: null,
+      isActive: true,
+      updatedAt: template.createdAt,
+      questions: questionsByTemplate.get(template.id) || [],
+    }));
   }
-
-  return templates.map((template) => ({
-    ...template,
-    questions: byTemplate.get(template.id) || [],
-  })) as DynamicFormTemplateDetails[];
 }
 
 export async function listActiveFormTemplates() {
   await requireUserSession();
-  return db
-    .select({
-      id: formTemplates.id,
-      name: formTemplates.name,
-      version: formTemplates.version,
-      isDraft: formTemplates.isDraft,
-      description: formTemplates.description,
-      isActive: formTemplates.isActive,
-      createdAt: formTemplates.createdAt,
-      updatedAt: formTemplates.updatedAt,
-    })
-    .from(formTemplates)
-    .where(and(eq(formTemplates.isActive, true), eq(formTemplates.isDraft, false)))
-    .orderBy(asc(formTemplates.name));
+  try {
+    return await db
+      .select({
+        id: formTemplates.id,
+        name: formTemplates.name,
+        version: formTemplates.version,
+        isDraft: formTemplates.isDraft,
+        description: formTemplates.description,
+        isActive: formTemplates.isActive,
+        createdAt: formTemplates.createdAt,
+        updatedAt: formTemplates.updatedAt,
+      })
+      .from(formTemplates)
+      .where(and(eq(formTemplates.isActive, true), eq(formTemplates.isDraft, false)))
+      .orderBy(asc(formTemplates.name));
+  } catch (error) {
+    if (!isSchemaCompatError(error)) throw error;
+
+    let templates: Array<{
+      id: string;
+      name: string;
+      version: number;
+      createdAt: Date;
+    }> = [];
+    try {
+      templates = await db
+        .select({
+          id: formTemplates.id,
+          name: formTemplates.name,
+          version: formTemplates.version,
+          createdAt: formTemplates.createdAt,
+        })
+        .from(formTemplates)
+        .orderBy(asc(formTemplates.name));
+    } catch (templatesError) {
+      if (!isSchemaCompatError(templatesError)) throw templatesError;
+      return [];
+    }
+
+    return templates.map((template) => ({
+      ...template,
+      isDraft: false,
+      description: null,
+      isActive: true,
+      updatedAt: template.createdAt,
+    }));
+  }
 }
 
 export async function getFormTemplateDetails(
@@ -167,28 +315,96 @@ export async function getFormTemplateDetails(
   options?: { includeInactive?: boolean }
 ) {
   await requireUserSession();
-  const [template] = await db
-    .select()
-    .from(formTemplates)
-    .where(
-      options?.includeInactive
-        ? eq(formTemplates.id, templateId)
-        : and(eq(formTemplates.id, templateId), eq(formTemplates.isActive, true))
-    )
-    .limit(1);
+  try {
+    const [template] = await db
+      .select()
+      .from(formTemplates)
+      .where(
+        options?.includeInactive
+          ? eq(formTemplates.id, templateId)
+          : and(eq(formTemplates.id, templateId), eq(formTemplates.isActive, true))
+      )
+      .limit(1);
 
-  if (!template) return null;
+    if (!template) return null;
 
-  const questions = await db
-    .select()
-    .from(formTemplateQuestions)
-    .where(eq(formTemplateQuestions.templateId, template.id))
-    .orderBy(asc(formTemplateQuestions.position));
+    const questions = await db
+      .select()
+      .from(formTemplateQuestions)
+      .where(eq(formTemplateQuestions.templateId, template.id))
+      .orderBy(asc(formTemplateQuestions.position));
 
-  return {
-    ...template,
-    questions,
-  } as DynamicFormTemplateDetails;
+    return {
+      ...template,
+      questions,
+    } as DynamicFormTemplateDetails;
+  } catch (error) {
+    if (!isSchemaCompatError(error)) throw error;
+
+    let template:
+      | {
+          id: string;
+          name: string;
+          version: number;
+          createdAt: Date;
+        }
+      | undefined;
+    try {
+      [template] = await db
+        .select({
+          id: formTemplates.id,
+          name: formTemplates.name,
+          version: formTemplates.version,
+          createdAt: formTemplates.createdAt,
+        })
+        .from(formTemplates)
+        .where(eq(formTemplates.id, templateId))
+        .limit(1);
+    } catch (templateError) {
+      if (!isSchemaCompatError(templateError)) throw templateError;
+      return null;
+    }
+
+    if (!template) return null;
+
+    let minimalQuestions: Array<{
+      id: string;
+      templateId: string;
+      key: string;
+      label: string;
+      type: string;
+    }> = [];
+    try {
+      minimalQuestions = await db
+        .select({
+          id: formTemplateQuestions.id,
+          templateId: formTemplateQuestions.templateId,
+          key: formTemplateQuestions.key,
+          label: formTemplateQuestions.label,
+          type: formTemplateQuestions.type,
+        })
+        .from(formTemplateQuestions)
+        .where(eq(formTemplateQuestions.templateId, template.id))
+        .orderBy(asc(formTemplateQuestions.id));
+    } catch (questionsError) {
+      if (!isSchemaCompatError(questionsError)) throw questionsError;
+    }
+
+    return {
+      ...template,
+      isDraft: false,
+      description: null,
+      isActive: true,
+      updatedAt: template.createdAt,
+      questions: minimalQuestions.map((question, index) => ({
+        ...question,
+        required: false,
+        helpText: null,
+        optionsJson: null,
+        position: index,
+      })),
+    };
+  }
 }
 
 export async function createFormTemplate(input: {
@@ -258,12 +474,18 @@ export async function updateFormTemplate(
 
 export async function deleteFormTemplate(templateId: string) {
   await requireAdminSession();
-  const [usage] = await db
-    .select({ value: sql<number>`COUNT(*)::int` })
-    .from(handovers)
-    .where(eq(handovers.templateId, templateId));
+  let usageCount = 0;
+  try {
+    const [usage] = await db
+      .select({ value: sql<number>`COUNT(*)::int` })
+      .from(handovers)
+      .where(eq(handovers.templateId, templateId));
+    usageCount = usage?.value || 0;
+  } catch (error) {
+    if (!isSchemaCompatError(error)) throw error;
+  }
 
-  if ((usage?.value || 0) > 0) {
+  if (usageCount > 0) {
     throw new Error("Cannot delete a form that has existing handovers");
   }
 
