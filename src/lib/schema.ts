@@ -103,6 +103,12 @@ export const formTemplateQuestions = pgTable("form_template_questions", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const appSettings = pgTable("app_settings", {
+  key: varchar("key", { length: 100 }).primaryKey(),
+  value: jsonb("value"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const handovers = pgTable("handovers", {
   id: uuid("id").defaultRandom().primaryKey(),
   vehicleId: uuid("vehicle_id")

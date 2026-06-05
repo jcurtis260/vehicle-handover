@@ -4,7 +4,12 @@ import {
   listHandovers,
   getHandoverStats,
   getDashboardAnalytics,
+  getDashboardMonthOptions,
+  getRecentPhotos,
 } from "@/lib/actions/handovers";
+import { getAnalyticsWidgetSettings } from "@/lib/actions/app-settings";
+import { DashboardMonthFilter } from "@/components/dashboard-month-filter";
+import { PhotoSlideshow } from "@/components/photo-slideshow";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,13 +18,13 @@ import {
   TopMakesChart,
 } from "@/components/dashboard-charts";
 import { AnalyticsCollapsible } from "@/components/analytics-collapsible";
+import { CollapsibleCard } from "@/components/collapsible-card";
 import {
   ClipboardPlus,
   FileText,
   FilePen,
   CheckCircle,
   Car,
-  Truck,
   ClipboardCheck,
   CalendarDays,
   TrendingUp,
@@ -31,13 +36,23 @@ import {
   User,
 } from "lucide-react";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ month?: string }>;
+}) {
   await requireAuth();
-  const [handovers, stats, analytics] = await Promise.all([
-    listHandovers(10),
-    getHandoverStats(),
-    getDashboardAnalytics(),
-  ]);
+  const { month } = await searchParams;
+  const [handovers, stats, analytics, visibleWidgetIds, monthOptions, recentPhotos] =
+    await Promise.all([
+      listHandovers(10),
+      getHandoverStats(),
+      getDashboardAnalytics(month),
+      getAnalyticsWidgetSettings(),
+      getDashboardMonthOptions(),
+      getRecentPhotos(20),
+    ]);
+  const visible = new Set(visibleWidgetIds);
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -90,143 +105,173 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      <AnalyticsCollapsible>
-        {/* Row 2: type split + this month */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Collections
-              </CardTitle>
-              <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{analytics.collections}</div>
-            </CardContent>
-          </Card>
+      <AnalyticsCollapsible
+        headerRight={
+          <DashboardMonthFilter
+            months={monthOptions}
+            selected={analytics.selectedMonth}
+          />
+        }
+      >
+        {/* Stat cards: type split, this month, quality metrics */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {visible.has("collections") && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Collections
+                </CardTitle>
+                <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{analytics.collections}</div>
+              </CardContent>
+            </Card>
+          )}
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Deliveries
-              </CardTitle>
-              <Truck className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{analytics.deliveries}</div>
-            </CardContent>
-          </Card>
+          {visible.has("dynamic") && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Custom Forms
+                </CardTitle>
+                <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{analytics.dynamic}</div>
+              </CardContent>
+            </Card>
+          )}
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                This Month
-              </CardTitle>
-              <CalendarDays className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold">{analytics.thisMonth}</span>
-                {analytics.monthTrend !== 0 && (
-                  <span
-                    className={`flex items-center text-xs font-medium ${
-                      analytics.monthTrend > 0
-                        ? "text-success"
-                        : "text-destructive"
-                    }`}
-                  >
-                    {analytics.monthTrend > 0 ? (
-                      <TrendingUp className="h-3 w-3 mr-0.5" />
-                    ) : (
-                      <TrendingDown className="h-3 w-3 mr-0.5" />
-                    )}
-                    {analytics.monthTrend > 0 ? "+" : ""}
-                    {analytics.monthTrend}% vs last month
-                  </span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+          {visible.has("thisMonth") && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  {analytics.thisMonthLabel}
+                </CardTitle>
+                <CalendarDays className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-bold">{analytics.thisMonth}</span>
+                  {analytics.monthTrend === null ? (
+                    analytics.thisMonth > 0 && (
+                      <span className="flex items-center text-xs font-medium text-success">
+                        <TrendingUp className="h-3 w-3 mr-0.5" />
+                        new
+                      </span>
+                    )
+                  ) : (
+                    analytics.monthTrend !== 0 && (
+                      <span
+                        className={`flex items-center text-xs font-medium ${
+                          analytics.monthTrend > 0
+                            ? "text-success"
+                            : "text-destructive"
+                        }`}
+                      >
+                        {analytics.monthTrend > 0 ? (
+                          <TrendingUp className="h-3 w-3 mr-0.5" />
+                        ) : (
+                          <TrendingDown className="h-3 w-3 mr-0.5" />
+                        )}
+                        {analytics.monthTrend > 0 ? "+" : ""}
+                        {analytics.monthTrend}% vs prev month
+                      </span>
+                    )
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-        {/* Row 3: pass rate, run flat, photos */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Avg Pass Rate
-              </CardTitle>
-              <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">
-                {analytics.passPercentage}%
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Across completed inspections
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Run Flat Tyres
-              </CardTitle>
-              <CircleDot className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">
-                {analytics.runFlatPercentage}%
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {analytics.totalTyres} tyres recorded
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Photos Captured
-              </CardTitle>
-              <Camera className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{analytics.totalPhotos}</div>
-              {analytics.damagePhotos > 0 && (
-                <p className="text-xs text-destructive mt-1">
-                  {analytics.damagePhotos} damage photo
-                  {analytics.damagePhotos !== 1 ? "s" : ""}
+          {visible.has("passRate") && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Avg Pass Rate
+                </CardTitle>
+                <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">
+                  {analytics.passPercentage}%
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Across completed inspections
                 </p>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
+
+          {visible.has("runFlat") && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Run Flat Tyres
+                </CardTitle>
+                <CircleDot className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">
+                  {analytics.runFlatPercentage}%
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {analytics.totalTyres} tyres recorded
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {visible.has("photos") && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Photos Captured
+                </CardTitle>
+                <Camera className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{analytics.totalPhotos}</div>
+                {analytics.damagePhotos > 0 && (
+                  <p className="text-xs text-destructive mt-1">
+                    {analytics.damagePhotos} damage photo
+                    {analytics.damagePhotos !== 1 ? "s" : ""}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Charts row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Handovers Over Time</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <HandoversOverTimeChart data={analytics.monthly} />
-            </CardContent>
-          </Card>
+          {visible.has("overTimeChart") && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Handovers Over Time</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <HandoversOverTimeChart data={analytics.monthly} />
+              </CardContent>
+            </Card>
+          )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Top Vehicle Makes</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <TopMakesChart data={analytics.topMakes} />
-            </CardContent>
-          </Card>
+          {visible.has("topMakes") && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Top Vehicle Makes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <TopMakesChart data={analytics.topMakes} />
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Failed checks + inspector row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {visible.has("failedChecks") && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
@@ -271,8 +316,9 @@ export default async function DashboardPage() {
               )}
             </CardContent>
           </Card>
+          )}
 
-          {analytics.isAdmin && (
+          {visible.has("inspectors") && analytics.isAdmin && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -312,11 +358,7 @@ export default async function DashboardPage() {
       </AnalyticsCollapsible>
 
       {/* Recent Handovers */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Recent Handovers</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <CollapsibleCard title="Recent Handovers" defaultOpen={false}>
           {handovers.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Car className="h-12 w-12 mx-auto mb-3 opacity-50" />
@@ -363,8 +405,14 @@ export default async function DashboardPage() {
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+      </CollapsibleCard>
+
+      {/* Photo slideshow (desktop only) */}
+      {recentPhotos.length > 0 && (
+        <div className="hidden lg:block">
+          <PhotoSlideshow photos={recentPhotos} />
+        </div>
+      )}
     </div>
   );
 }

@@ -16,6 +16,7 @@ interface MonthlyData {
   month: string;
   collections: number;
   deliveries: number;
+  dynamic: number;
 }
 
 interface MakeData {
@@ -89,6 +90,13 @@ export function HandoversOverTimeChart({ data }: { data: MonthlyData[] }) {
           dataKey="deliveries"
           name="Deliveries"
           fill="hsl(160, 55%, 50%)"
+          radius={[3, 3, 0, 0]}
+          stackId="a"
+        />
+        <Bar
+          dataKey="dynamic"
+          name="Custom Forms"
+          fill="hsl(280, 50%, 55%)"
           radius={[3, 3, 0, 0]}
           stackId="a"
         />

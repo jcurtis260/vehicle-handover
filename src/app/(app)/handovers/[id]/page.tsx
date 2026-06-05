@@ -349,8 +349,75 @@ export default async function HandoverReviewPage({
           </CardHeader>
           <CardContent>
             <dl className="space-y-3 text-sm">
-              {dynamicResponses.map((response) => {
+              {dynamicResponses
+                .filter((response) => response.questionKey !== "__template_name")
+                .map((response) => {
                 const value = response.valueJson;
+
+                // Render signature answers as the captured image.
+                if (
+                  response.questionType === "signature" &&
+                  typeof value === "string" &&
+                  value.trim()
+                ) {
+                  return (
+                    <div key={response.id}>
+                      <dt className="text-muted-foreground">
+                        {response.questionLabel}
+                      </dt>
+                      <dd className="mt-1 rounded-lg border border-border bg-white p-4 max-w-md">
+                        <Image
+                          src={value}
+                          alt={response.questionLabel}
+                          width={600}
+                          height={200}
+                          className="w-full h-auto"
+                        />
+                      </dd>
+                    </div>
+                  );
+                }
+
+                // Render photo answers as a gallery of images.
+                if (response.questionType === "photo") {
+                  const urls = (Array.isArray(value) ? value : []).filter(
+                    (url): url is string =>
+                      typeof url === "string" && url.trim().length > 0
+                  );
+                  return (
+                    <div key={response.id}>
+                      <dt className="text-muted-foreground">
+                        {response.questionLabel}
+                      </dt>
+                      <dd className="mt-1">
+                        {urls.length === 0 ? (
+                          <span className="font-medium">N/A</span>
+                        ) : (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            {urls.map((url, i) => (
+                              <a
+                                key={i}
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="rounded-lg overflow-hidden border border-border block"
+                              >
+                                <Image
+                                  src={url}
+                                  alt={`${response.questionLabel} ${i + 1}`}
+                                  width={300}
+                                  height={300}
+                                  className="w-full h-auto object-cover"
+                                />
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </dd>
+                    </div>
+                  );
+                }
+
                 let display = "N/A";
                 if (Array.isArray(value)) {
                   display = value.join(", ") || "N/A";

@@ -114,6 +114,13 @@ async function runAutoMigrations() {
     `;
     try { await _sql`ALTER TYPE photo_category ADD VALUE IF NOT EXISTS 'v5'`; } catch { /* already exists */ }
     try { await _sql`ALTER TYPE photo_category ADD VALUE IF NOT EXISTS 'signature'`; } catch { /* already exists */ }
+    await _sql`
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key VARCHAR(100) PRIMARY KEY,
+        value JSONB,
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `;
   } catch (err) {
     console.error("[AutoMigrate] Failed:", err);
   }

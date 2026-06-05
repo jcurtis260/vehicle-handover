@@ -23,6 +23,8 @@ import {
   count,
   gte,
   lte,
+  lt,
+  notInArray,
 } from "drizzle-orm";
 import {
   CHECK_ITEM_LABELS,
@@ -968,7 +970,7 @@ export async function linkPhotosToHandover(
   revalidatePath(`/handovers/${handoverId}`);
 }
 
-export async function getDashboardAnalytics() {
+export async function getDashboardAnalytics(monthParam?: string | null) {
   const session = await requireActionSession();
 
   const isAdmin = session.user.role === "admin";
@@ -976,8 +978,65 @@ export async function getDashboardAnalytics() {
   const userFilter = canSeeAll ? sql`1=1` : eq(handovers.userId, session.user.id);
 
   const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+  // Resolve the selected period from the month param.
+  // - "all"            -> no date filter (all time)
+  // - "YYYY-MM"         -> that calendar month
+  // - undefined/invalid -> current calendar month (default)
+  let monthMatch: string | null = null;
+  if (typeof monthParam === "string" && /^\d{4}-\d{2}$/.test(monthParam)) {
+    const monthNum = Number(monthParam.slice(5, 7));
+    // Reject out-of-range months (e.g. 2024-00, 2024-13) so they don't roll
+    // over into another year via the Date constructor.
+    if (monthNum >= 1 && monthNum <= 12) {
+      monthMatch = monthParam;
+    }
+  }
+
+  let rangeStart: Date | null;
+  let rangeEnd: Date | null;
+  let selectedMonth: string;
+
+  if (monthParam === "all") {
+    rangeStart = null;
+    rangeEnd = null;
+    selectedMonth = "all";
+  } else if (monthMatch) {
+    const [y, m] = monthMatch.split("-").map(Number);
+    rangeStart = new Date(y, m - 1, 1);
+    rangeEnd = new Date(y, m, 1);
+    selectedMonth = monthMatch;
+  } else {
+    rangeStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    rangeEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    selectedMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  const isAllTime = rangeStart === null;
+  const periodLabel = rangeStart
+    ? rangeStart.toLocaleString("en-GB", { month: "long", year: "numeric" })
+    : "All time";
+
+  // Period-aware filter applied to every metric.
+  const inPeriod =
+    rangeStart && rangeEnd
+      ? and(userFilter, gte(handovers.date, rangeStart), lt(handovers.date, rangeEnd))
+      : userFilter;
+
+  // "This Month" card: the selected month (or current month when viewing all time),
+  // compared against the month immediately before it.
+  const cardStart = rangeStart ?? new Date(now.getFullYear(), now.getMonth(), 1);
+  const cardEnd =
+    rangeEnd ?? new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const prevStart = new Date(cardStart.getFullYear(), cardStart.getMonth() - 1, 1);
+  const thisMonthLabel = cardStart.toLocaleString("en-GB", {
+    month: "short",
+    year: "numeric",
+  });
+
+  // Chart window: a single month when filtered, otherwise the trailing 6 months.
+  const chartStart =
+    rangeStart ?? new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
   const allLabels: Record<string, string> = {
     ...CHECK_ITEM_LABELS,
@@ -987,6 +1046,7 @@ export async function getDashboardAnalytics() {
   const [
     collectionsResult,
     deliveriesResult,
+    dynamicResult,
     thisMonthResult,
     lastMonthResult,
     passRateResult,
@@ -1002,29 +1062,41 @@ export async function getDashboardAnalytics() {
     db
       .select({ value: count() })
       .from(handovers)
-      .where(and(userFilter, eq(handovers.type, "collection"))),
+      .where(and(inPeriod, eq(handovers.type, "collection"))),
 
     // Deliveries count
     db
       .select({ value: count() })
       .from(handovers)
-      .where(and(userFilter, eq(handovers.type, "delivery"))),
+      .where(and(inPeriod, eq(handovers.type, "delivery"))),
 
-    // This month
+    // Dynamic (custom form) count
     db
       .select({ value: count() })
       .from(handovers)
-      .where(and(userFilter, gte(handovers.date, startOfMonth))),
+      .where(and(inPeriod, eq(handovers.type, "dynamic"))),
 
-    // Last month
+    // "This Month" card: selected month count
     db
       .select({ value: count() })
       .from(handovers)
       .where(
         and(
           userFilter,
-          gte(handovers.date, startOfLastMonth),
-          sql`${handovers.date} < ${startOfMonth}`
+          gte(handovers.date, cardStart),
+          lt(handovers.date, cardEnd)
+        )
+      ),
+
+    // Previous month count (for the trend)
+    db
+      .select({ value: count() })
+      .from(handovers)
+      .where(
+        and(
+          userFilter,
+          gte(handovers.date, prevStart),
+          lt(handovers.date, cardStart)
         )
       ),
 
@@ -1036,7 +1108,7 @@ export async function getDashboardAnalytics() {
       })
       .from(handoverChecks)
       .innerJoin(handovers, eq(handoverChecks.handoverId, handovers.id))
-      .where(and(userFilter, eq(handovers.status, "completed"))),
+      .where(and(inPeriod, eq(handovers.status, "completed"))),
 
     // Tyre stats: total and run flat count
     db
@@ -1046,21 +1118,21 @@ export async function getDashboardAnalytics() {
       })
       .from(tyreRecords)
       .innerJoin(handovers, eq(tyreRecords.handoverId, handovers.id))
-      .where(userFilter),
+      .where(inPeriod),
 
     // Total photos
     db
       .select({ value: count() })
       .from(handoverPhotos)
       .innerJoin(handovers, eq(handoverPhotos.handoverId, handovers.id))
-      .where(userFilter),
+      .where(inPeriod),
 
     // Damage photos
     db
       .select({ value: count() })
       .from(handoverPhotos)
       .innerJoin(handovers, eq(handoverPhotos.handoverId, handovers.id))
-      .where(and(userFilter, eq(handoverPhotos.category, "damage"))),
+      .where(and(inPeriod, eq(handoverPhotos.category, "damage"))),
 
     // Top 8 vehicle makes
     db
@@ -1070,12 +1142,12 @@ export async function getDashboardAnalytics() {
       })
       .from(vehicles)
       .innerJoin(handovers, eq(handovers.vehicleId, vehicles.id))
-      .where(userFilter)
+      .where(inPeriod)
       .groupBy(vehicles.make)
       .orderBy(desc(count()))
       .limit(8),
 
-    // Monthly handovers (last 6 months)
+    // Monthly handovers (single month when filtered, otherwise last 6 months)
     db
       .select({
         month: sql<string>`TO_CHAR(${handovers.date}, 'YYYY-MM')`,
@@ -1084,13 +1156,13 @@ export async function getDashboardAnalytics() {
       })
       .from(handovers)
       .where(
-        and(
-          userFilter,
-          gte(
-            handovers.date,
-            new Date(now.getFullYear(), now.getMonth() - 5, 1)
-          )
-        )
+        rangeEnd
+          ? and(
+              userFilter,
+              gte(handovers.date, chartStart),
+              lt(handovers.date, rangeEnd)
+            )
+          : and(userFilter, gte(handovers.date, chartStart))
       )
       .groupBy(sql`TO_CHAR(${handovers.date}, 'YYYY-MM')`, handovers.type)
       .orderBy(sql`TO_CHAR(${handovers.date}, 'YYYY-MM')`),
@@ -1104,7 +1176,7 @@ export async function getDashboardAnalytics() {
       })
       .from(handoverChecks)
       .innerJoin(handovers, eq(handoverChecks.handoverId, handovers.id))
-      .where(and(userFilter, eq(handovers.status, "completed")))
+      .where(and(inPeriod, eq(handovers.status, "completed")))
       .groupBy(handoverChecks.checkItem)
       .orderBy(desc(sql`COUNT(*) FILTER (WHERE ${handoverChecks.checked} = false)`))
       .limit(10),
@@ -1118,6 +1190,7 @@ export async function getDashboardAnalytics() {
           })
           .from(handovers)
           .innerJoin(users, eq(handovers.userId, users.id))
+          .where(inPeriod)
           .groupBy(users.name)
           .orderBy(desc(count()))
           .limit(5)
@@ -1138,37 +1211,56 @@ export async function getDashboardAnalytics() {
 
   const thisMonth = thisMonthResult[0].value;
   const lastMonth = lastMonthResult[0].value;
+  // When there were no handovers last month, a percentage change is undefined.
+  // Return null so the UI can show "new" rather than a misleading +100%.
   const monthTrend =
     lastMonth > 0
       ? Math.round(((thisMonth - lastMonth) / lastMonth) * 100)
-      : thisMonth > 0
-        ? 100
-        : 0;
+      : null;
 
-  // Pivot monthly data into { month, collections, deliveries }
+  // Pivot monthly data into { month, collections, deliveries, dynamic }.
+  // Pre-seed the relevant months so the chart shows a continuous axis even for
+  // months with zero handovers: the trailing 6 months for "all time", or the
+  // single selected month when filtered.
   const monthlyMap = new Map<
     string,
-    { month: string; collections: number; deliveries: number }
+    { month: string; collections: number; deliveries: number; dynamic: number }
   >();
+  const seedCount = isAllTime ? 6 : 1;
+  for (let i = seedCount - 1; i >= 0; i--) {
+    const d = new Date(
+      chartStart.getFullYear(),
+      chartStart.getMonth() + (seedCount - 1 - i),
+      1
+    );
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    monthlyMap.set(key, {
+      month: key,
+      collections: 0,
+      deliveries: 0,
+      dynamic: 0,
+    });
+  }
   for (const row of monthlyResult) {
-    if (!monthlyMap.has(row.month)) {
-      monthlyMap.set(row.month, {
-        month: row.month,
-        collections: 0,
-        deliveries: 0,
-      });
-    }
-    const entry = monthlyMap.get(row.month)!;
+    const entry = monthlyMap.get(row.month);
+    if (!entry) continue;
     if (row.type === "delivery") {
       entry.deliveries = row.total;
+    } else if (row.type === "dynamic") {
+      entry.dynamic = row.total;
     } else {
       entry.collections = row.total;
     }
   }
 
   return {
+    selectedMonth,
+    periodLabel,
+    isAllTime,
+    thisMonthLabel,
     collections: collectionsResult[0].value,
     deliveries: deliveriesResult[0].value,
+    dynamic: dynamicResult[0].value,
     thisMonth,
     monthTrend,
     passPercentage,
@@ -1195,6 +1287,84 @@ export async function getDashboardAnalytics() {
     })),
     isAdmin,
   };
+}
+
+/**
+ * Returns the list of months (newest first, "YYYY-MM") that the dashboard month
+ * filter can offer, spanning from the earliest handover up to the current month.
+ */
+export async function getDashboardMonthOptions(): Promise<string[]> {
+  const session = await requireActionSession();
+
+  const canSeeAll = canViewAllReports(session.user);
+  const userFilter = canSeeAll ? sql`1=1` : eq(handovers.userId, session.user.id);
+
+  const [earliest] = await db
+    .select({ min: sql<string | null>`MIN(${handovers.date})` })
+    .from(handovers)
+    .where(userFilter);
+
+  const now = new Date();
+  const start = earliest?.min ? new Date(earliest.min) : now;
+
+  const months: string[] = [];
+  const cursor = new Date(now.getFullYear(), now.getMonth(), 1);
+  const floor = new Date(start.getFullYear(), start.getMonth(), 1);
+
+  // Cap at 60 months to avoid unbounded lists.
+  let guard = 0;
+  while (cursor >= floor && guard < 60) {
+    months.push(
+      `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`
+    );
+    cursor.setMonth(cursor.getMonth() - 1);
+    guard += 1;
+  }
+
+  return months;
+}
+
+export interface RecentPhoto {
+  id: string;
+  url: string;
+  caption: string | null;
+  handoverId: string;
+  vehicleMake: string;
+  vehicleModel: string;
+  vehicleRegistration: string;
+}
+
+/**
+ * Returns the most recent vehicle photos for the dashboard slideshow.
+ * Respects view permissions and skips signatures/V5 documents (not visual).
+ */
+export async function getRecentPhotos(limit = 20): Promise<RecentPhoto[]> {
+  const session = await requireActionSession();
+
+  const canSeeAll = canViewAllReports(session.user);
+  const userFilter = canSeeAll ? sql`1=1` : eq(handovers.userId, session.user.id);
+
+  return db
+    .select({
+      id: handoverPhotos.id,
+      url: handoverPhotos.blobUrl,
+      caption: handoverPhotos.caption,
+      handoverId: handoverPhotos.handoverId,
+      vehicleMake: vehicles.make,
+      vehicleModel: vehicles.model,
+      vehicleRegistration: vehicles.registration,
+    })
+    .from(handoverPhotos)
+    .innerJoin(handovers, eq(handoverPhotos.handoverId, handovers.id))
+    .innerJoin(vehicles, eq(handovers.vehicleId, vehicles.id))
+    .where(
+      and(
+        userFilter,
+        notInArray(handoverPhotos.category, ["signature", "v5"])
+      )
+    )
+    .orderBy(desc(handoverPhotos.createdAt))
+    .limit(limit);
 }
 
 export async function getHandoverFilterOptions() {

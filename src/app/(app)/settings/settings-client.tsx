@@ -20,6 +20,12 @@ import {
   MIN_PASSWORD_MAX_AGE_DAYS,
   normalizePasswordMaxAgeDays,
 } from "@/lib/password-policy";
+import { saveAnalyticsWidgetSettings } from "@/lib/actions/app-settings";
+import {
+  DASHBOARD_WIDGET_IDS,
+  DASHBOARD_WIDGET_LABELS,
+  type DashboardWidgetId,
+} from "@/lib/dashboard-widgets";
 import {
   UserPlus,
   Trash2,
@@ -31,6 +37,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  BarChart3,
 } from "lucide-react";
 
 interface UserItem {
@@ -85,13 +92,21 @@ function getPasswordStatus(
 export function SettingsClient({
   initialUsers,
   initialVehicleCatalog,
+  initialAnalyticsWidgets,
 }: {
   initialUsers: UserItem[];
   initialVehicleCatalog: VehicleMakeItem[];
+  initialAnalyticsWidgets: DashboardWidgetId[];
 }) {
   const [users, setUsers] = useState(initialUsers);
   const [usersSectionOpen, setUsersSectionOpen] = useState(false);
   const [catalogSectionOpen, setCatalogSectionOpen] = useState(false);
+  const [analyticsSectionOpen, setAnalyticsSectionOpen] = useState(false);
+  const [visibleWidgets, setVisibleWidgets] = useState<Set<DashboardWidgetId>>(
+    () => new Set(initialAnalyticsWidgets)
+  );
+  const [analyticsError, setAnalyticsError] = useState("");
+  const [analyticsSaved, setAnalyticsSaved] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -382,6 +397,39 @@ export function SettingsClient({
         setUsers((prev) => prev.filter((u) => u.id !== userId));
       } catch (err) {
         alert(err instanceof Error ? err.message : "Failed to delete user");
+      }
+    });
+  }
+
+  function toggleWidget(id: DashboardWidgetId) {
+    setAnalyticsSaved(false);
+    setVisibleWidgets((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function handleSaveAnalytics() {
+    setAnalyticsError("");
+    setAnalyticsSaved(false);
+    const selected = DASHBOARD_WIDGET_IDS.filter((id) => visibleWidgets.has(id));
+    startTransition(async () => {
+      try {
+        const result = await saveAnalyticsWidgetSettings(selected);
+        if (!result.ok) {
+          setAnalyticsError(result.error);
+          return;
+        }
+        setAnalyticsSaved(true);
+      } catch (err) {
+        setAnalyticsError(
+          err instanceof Error ? err.message : "Failed to save analytics settings"
+        );
       }
     });
   }
@@ -975,6 +1023,77 @@ export function SettingsClient({
                 </div>
                 );
               })}
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <button
+            type="button"
+            onClick={() => setAnalyticsSectionOpen((prev) => !prev)}
+            className="w-full flex items-center justify-between text-left"
+            aria-expanded={analyticsSectionOpen}
+            aria-controls="settings-analytics-section"
+          >
+            <CardTitle className="text-lg flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              Dashboard Analytics ({visibleWidgets.size}/{DASHBOARD_WIDGET_IDS.length})
+            </CardTitle>
+            {analyticsSectionOpen ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
+          </button>
+        </CardHeader>
+        {analyticsSectionOpen && (
+          <CardContent id="settings-analytics-section" className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Choose which analytics widgets appear on the dashboard. This applies
+              to all users. The core stats (Total, Drafts, Completed) and Recent
+              Handovers are always shown.
+            </p>
+
+            {analyticsError && (
+              <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
+                {analyticsError}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {DASHBOARD_WIDGET_IDS.map((id) => (
+                <label
+                  key={id}
+                  className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm cursor-pointer select-none hover:bg-accent/50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={visibleWidgets.has(id)}
+                    onChange={() => toggleWidget(id)}
+                    className="h-4 w-4 rounded border-border text-primary accent-primary shrink-0"
+                  />
+                  <span>{DASHBOARD_WIDGET_LABELS[id]}</span>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              {analyticsSaved && (
+                <span className="text-sm text-success flex items-center gap-1">
+                  <Check className="h-4 w-4" />
+                  Saved
+                </span>
+              )}
+              <Button
+                onClick={handleSaveAnalytics}
+                disabled={isPending}
+                className="min-h-[44px]"
+              >
+                {isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                Save Analytics
+              </Button>
             </div>
           </CardContent>
         )}
